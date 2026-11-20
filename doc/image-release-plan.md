@@ -1,6 +1,6 @@
 # Plan: first qualified Raspberry Pi 4 image release
 
-**Audience: developers and release maintainers.** Proposed work and release gates,
+**Audience: developers and advanced administrators.** Proposed work and release gates,
 not a claim that qualification has been completed.
 
 [Documentation index](README.md) · [Release procedure](releasing.md) ·
