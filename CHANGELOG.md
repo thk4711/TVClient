@@ -11,8 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Release
 - Publish the first downloadable Raspberry Pi 4 image distribution as the normal
-  GitHub v0.1.1 release, with versioned image/source assets, signed checksums,
-  offline manual, build evidence and explicit image qualification limits.
+  GitHub v0.1.1 release, with four uploaded assets: the unchanged image ZIP,
+  one SHA-256 file, release notes and a consolidated corresponding-source/licence
+  bundle. Keep the offline manual in the image and image qualification limits
+  in the release notes.
 
 ### Changed
 - Describe all current features as tested and supported within their compatibility

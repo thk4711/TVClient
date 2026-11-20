@@ -29,7 +29,8 @@ At planning time:
   validation, but neither a full image build nor release publication.
 - The initial assessment found no pinned qualified builder, published legal/source
   bundle, signing identity, or versioned fresh-card acceptance report. Release
-  preparation now defines the checksum-signing identity in [Releasing](releasing.md#recipient-verification).
+  preparation now uses the four-asset layout in [Releasing](releasing.md#published-image),
+  with checksums and one corresponding-source/licence bundle.
 
 Previous builds and real-device experience reduce the risk and should inform the
 checklist. Recover any existing test notes, but do not silently convert informal
@@ -120,9 +121,8 @@ unqualified builder configuration and incomplete artifacts.
 
 Separate build-time eligibility from post-build acceptance. **Recommended policy:**
 a candidate has its image version and candidate profile baked in, but does not
-claim completed physical qualification. A signed external release/qualification
-manifest declares stable status only after acceptance, bound to the raw-image and
-ZIP digests. Document the exact meaning of any `release` field before changing it;
+claim completed physical qualification. A privately retained qualification
+report records acceptance, bound to the raw-image and ZIP digests. Document the exact meaning of any `release` field before changing it;
 never set `hardware_tested=true` merely because compilation passed.
 
 Promote the already-tested bytes, not a new build. If instead stable status or a
@@ -149,33 +149,35 @@ private development checkout. Resolve toolchain/runtime-libc source omissions,
 firmware redistribution conditions, vendored notices and patched copyleft sources.
 A successful command or automatic GitHub source archive is not sufficient.
 
-Publish a small user download set plus maintainer/source evidence:
+Publish exactly four uploaded assets:
 
 | Asset | Purpose |
 |---|---|
 | Versioned Pi 4 image ZIP | Flashable image; retain the single `sdcard.img` ZIP member |
-| `RELEASE_SHA256SUMS` + signature | Hash every release payload, including ZIP, source and evidence bundles; signature is separate |
-| Raw-image checksum manifest | Verify the extracted image, not only the ZIP |
-| Release manifest | Version, commit, builder, profiles, raw/ZIP digests and complete asset inventory |
-| Public build evidence bundle | Build metadata, resolved config, input hashes and verification summary |
-| Project/build source archive | Complete public revision, Buildroot build machinery and external tree |
-| Third-party source/licence bundles | Corresponding sources, local patches, manifests and notices; review completeness |
-| Package inventory | Exact built package versions; call it an SBOM only if it meets the selected SBOM format/scope |
-| Qualification report and release notes | Hardware, steps/results, skips, limitations and installation/reflash warning |
-| Offline manual | Same user instructions as the image's built-in manual |
+| `SHA256SUMS` | ZIP, extracted image, release notes and legal-bundle integrity checks |
+| `RELEASE_NOTES.md` | Capabilities, hardware, qualification limits and installation/reflash warning |
+| One versioned source/licence bundle | Target copyleft corresponding sources, patches, target notices and relevant project/Buildroot/toolchain-runtime build/configuration material |
 
-Standalone kernel/rootfs artifacts are optional advanced downloads, not the main
-installation path. Do not upload raw private logs, credentials, host settings,
-backups or an unreviewed `satip-build.json`. Determine total bundle sizes before
-publication; split large source bundles into documented parts if GitHub's current
-asset limits require it. All required source parts must be available with the binary.
+GitHub also displays automatic project-source links. They do not replace the
+third-party corresponding sources in the consolidated bundle. Retain build logs,
+builder/version inventories and qualification evidence privately, not as separate
+release downloads. Do not publish separate Python distributions, manuals,
+manifests/evidence, signature/key assets, verification guides or reconstruction
+guides with the image.
 
-Choose and document a checksum-signing key and independently discoverable trusted
-fingerprint, or a supported GitHub artifact-attestation identity/verification flow.
-Checksums alone do not authenticate the publisher. Verify the chosen recipient
-procedure from a clean machine. Preserve legal/source availability with the binary.
+Select required material according to the actual distributed target components'
+licences. Include all required target notices and target GPL/LGPL/MPL source/patch
+material, plus relevant build/configuration scripts and external glibc/GCC runtime
+source/licence coverage. Omit unrelated build-host downloads and permissive-only
+source archives where their licences do not require them. Preserve all required
+material with the binary; a successful legal-info run is not itself a completeness
+certificate.
 
-**Done:** a reviewed, complete, authenticated candidate asset set exists.
+Checksums provide integrity, not publisher authentication. This simplified layout
+does not publish a separate signature. Inspect archive inventories and avoid
+private logs, credentials, backups and build-host provisioning data.
+
+**Done:** a reviewed, complete, checksummed four-asset set exists.
 
 ## 5. Qualify the exact image on a fresh card
 
@@ -233,16 +235,17 @@ Add a manually dispatched release workflow or reviewed packaging/publishing help
 under `.github/workflows/` / `scripts/`. Full builds may initially run on the
 pinned external Debian builder; a large hosted-CI build is not a prerequisite.
 The publishing job must validate commit/version, asset hashes, required legal
-material and signed qualification status before uploading. Keep ordinary CI
-read-only; isolate signing credentials and scope write permission to publication.
+material and accurate qualification claims before uploading. Keep ordinary CI
+read-only and scope write permission to publication.
 
 1. Prepare the complete asset set locally against the reviewed commit. Verify
    manifest completeness, ZIP and extracted-image digests, and source bundles.
 2. Record available exact-image acceptance and obtain maintainer sign-off.
    Clearly disclose checks that remain outstanding; never invent a passed gate.
 3. Publish directly as the normal `v0.1.1` release with all assets in one
-   invocation, without `--draft` or `--prerelease`. Never replace published bytes
-   under the same version: use a new release if an artifact must change.
+   invocation, without `--draft` or `--prerelease`. Never replace the image bytes
+   under the same version. Ancillary asset corrections require explicit approval
+   and must preserve the image digest and legally required source availability.
 4. Verify public unauthenticated downloads and recipient checksum instructions.
 5. Add a prominent **Download image** link in the root README and installation/manual
    guides using the explicit version URL. Regenerate printable HTML when the manual changes.

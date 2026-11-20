@@ -16,12 +16,13 @@ build. Publishing source or passing CI does not change those boundaries.
 ## Published image
 
 The [v0.1.1 GitHub release](https://github.com/thk4711/TVClient/releases/tag/v0.1.1)
-is published as a normal release, not a draft or prerelease. Its 18 assets include
-the image ZIP, signed checksums, offline manual, build evidence and corresponding
-project/Buildroot/third-party/toolchain sources. The source tag identifies commit
+is published as a normal release, not a draft or prerelease. Its four uploaded assets are
+the image ZIP, `SHA256SUMS`, `RELEASE_NOTES.md` and one
+`satip-sources-and-licences-v0.1.1.tar.gz` bundle. The source tag identifies commit
 `1e94c75d3cbe761064cd7bfdf96ca44f04eb3446`; publication does not change the image
-qualification boundaries described above. Recipient instructions are also supplied
-as `VERIFY.md`, and release-specific capabilities/limitations are in the notes.
+qualification boundaries described above. The image bytes and source tag are unchanged by asset consolidation.
+Release-specific capabilities, installation precautions and limitations are in
+the notes; the image already includes its offline user manual.
 
 ## 1. Select the candidate and builder
 
@@ -220,21 +221,37 @@ a claim of complete fresh-image/hardware qualification. All current features
 are tested and working within their compatibility limits. Record outstanding
 exact-image checks in the release notes.
 
-Bind every published artifact to the candidate commit and image digest. Include:
+Bind every published artifact to the candidate commit and image digest. Upload
+exactly four assets:
 
-- Image ZIP and/or raw image, checksums, public build metadata and resolved config.
-- Complete project/build sources and the reviewed third-party source/license bundle.
-- Package inventory/SBOM if generated, builder identity and verification evidence.
-- Versioned release notes with supported hardware, acceptance results and known limits.
-- Installation/provisioning instructions and the whole-card data replacement warning.
+- Versioned image ZIP, retaining its single `sdcard.img` member.
+- `SHA256SUMS` covering the three other assets and the extracted raw image.
+- `RELEASE_NOTES.md` with capabilities, hardware, qualification limits and the
+  whole-card data replacement warning; use the same text as the release body.
+- One versioned source/licence bundle with target copyleft corresponding sources,
+  applied patches, target notices, relevant build scripts/configurations, and
+  external-toolchain runtime sources/notices omitted by ordinary legal-info.
 
-Generate a release-level checksum manifest covering all downloadable assets,
-including the ZIP and source/license bundles. Sign it or attach authenticated
-provenance using the project's selected release identity; document that identity
-and verification method. Existing `SHA256SUMS`/`ZIP_SHA256SUMS` only provide integrity,
-not publisher authentication. Do not change `release=false` or remove development
-labels solely to publish the files. Promotion to a qualified release needs a
-separately implemented and reviewed policy/profile.
+Keep build logs and qualification evidence privately. Do not attach separate
+Python distributions, offline manuals, build manifests/evidence, signature keys,
+signatures, verification guides or reconstruction guides to image releases.
+GitHub's automatic project-source links are additional platform-generated links,
+not replacements for the bundled third-party corresponding sources.
+
+Source selection is based on the actual distributed target components and their
+licences, not every build download. Preserve GPL/LGPL/MPL corresponding sources
+and relevant local changes, all required target notices (including permissive
+components and firmware), the exact public project/Buildroot build machinery,
+and necessary generated build configuration. External glibc/GCC runtime coverage
+requires its sources, licence texts, patches and toolchain build machinery.
+Build-host tools not distributed in the image and permissive-only source archives
+need not all be published. Review alternate and package-specific licence terms;
+a name/version/upstream-link inventory alone is not complete corresponding source.
+
+Checksums provide integrity, not publisher authentication; this simplified release
+layout does not publish a separate signature. Do not change `release=false` or
+claim hardware qualification just to publish files. Build-profile promotion still
+requires a separately implemented and reviewed policy/profile.
 
 Release automation should build from reviewed revisions, use fresh outputs,
 retain logs and legal evidence, and publish only completed candidate sets. Do not
@@ -243,51 +260,18 @@ logs, assets or source archives.
 
 ## Recipient verification
 
-Download the image, release checksum manifest and any signature/attestation from
-the same release. Verify the signature/attestation using the release's documented
-identity and tool before relying on the checksum manifest. The release checksum manifest uses an OpenSSH Ed25519 signature with namespace
-`satip-release`. The trusted public key is committed as
-[`.github/release-signing.pub`](../.github/release-signing.pub); its fingerprint is
-`SHA256:Ysg4PrszTMGx3WXLP1VoIl2Jb9BL357RmeljxtJUsL0`. Obtain it from the reviewed
-source revision through a trusted GitHub connection, not solely from an
-untrusted image mirror. The signing key authenticates release files; it does not
-certify hardware qualification.
+Download the image ZIP and `SHA256SUMS` from the same GitHub release over HTTPS.
+The checksum file has entries for the ZIP, extracted `sdcard.img`, release notes
+and source/licence bundle. Check only the entries for files you downloaded, or
+extract the image and download the full asset set before checking the whole file.
+A missing listed file is not a successful full-set check. There is no separate
+signature or verification guide in the simplified release.
 
-With OpenSSH 8.2 or newer, verify before extracting/flashing:
+For your own wrapper builds, the existing `SHA256SUMS` covers collected artifacts
+and `BUILD_SHA256SUMS` preserves the raw-image digest. These build manifests are
+not additional downloadable release assets.
 
-~~~sh
-ssh-keygen -lf release-signing.pub
-# Compare the fingerprint with the trusted value above.
-printf 'tvclient-release %s\n' "$(cat release-signing.pub)" > allowed-signers
-ssh-keygen -Y verify -f allowed-signers -I tvclient-release \
-  -n satip-release -s RELEASE_SHA256SUMS.sig < RELEASE_SHA256SUMS
-# Then check every payload listed in the manifest (all must be downloaded):
-sha256sum -c RELEASE_SHA256SUMS
-# macOS: shasum -a 256 -c RELEASE_SHA256SUMS
-~~~
-
-The manifest covers release payloads, not itself or its detached signature.
-The raw-image manifest is checked after extraction. A missing listed file is
-not a successful full-set checksum verification.
-
-For the helper's existing artifact manifests:
-
-~~~sh
-# Linux, from the directory containing the corresponding downloaded files:
-sha256sum -c ZIP_SHA256SUMS
-# Or on macOS:
-shasum -a 256 -c ZIP_SHA256SUMS
-~~~
-
-Extract `sdcard.img.zip` and compare `sdcard.img` with its entry in the authenticated
-raw-image checksum manifest (`BUILD_SHA256SUMS` for current wrapper builds;
-include this file in the authenticated release assets). `SHA256SUMS` describes
-the collected ZIP or raw artifacts, not an extracted image in ZIP mode.
-If downloading the full collected artifact set, use
-`sha256sum -c SHA256SUMS` (or `shasum -a 256 -c SHA256SUMS` on macOS). A full manifest
-check requires all listed files; a missing file is not a successful check.
-
-Write the verified image using Raspberry Pi Imager's **Use custom** option, select
-the intended test SD card, and verify the write. This replaces all card partitions
-and data. Use the project's `satip-config.txt` provisioning instructions instead of
-Imager OS customization, then follow [installation](installation.md).
+Write the extracted image using Raspberry Pi Imager's **Use custom** option and
+write verification. This replaces all card partitions and data. Use the project's
+provisioning instructions instead of Imager OS customization, then follow
+[installation](installation.md).

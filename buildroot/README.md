@@ -227,8 +227,10 @@ material from the isolated public checkout described in the release guide.
 
 Manually confirm the destination before flashing **only the test card**. A whole
 image flash replaces data. Keep the working card and private backups untouched.
-For a published image, obtain checksums and their signature/attestation from the
-same release and verify them as described in [Releasing](../doc/releasing.md#recipient-verification).
+For a published image, obtain the ZIP and `SHA256SUMS` from the same release
+over HTTPS. The checksum file includes the ZIP and extracted `sdcard.img`; see
+[Releasing](../doc/releasing.md#recipient-verification). No separate signature
+or verification guide is attached to the simplified image release.
 For your own build, require `VERIFIED.json` and check `SHA256SUMS` in its artifact
 directory. In ZIP mode, extract the image for flashing; its raw digest is recorded
 in `BUILD_SHA256SUMS`. Then use Raspberry Pi Imager's **Use custom**

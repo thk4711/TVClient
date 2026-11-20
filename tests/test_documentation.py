@@ -40,6 +40,19 @@ class DocumentationTests(unittest.TestCase):
             for internal in ("/run/satip", "/data/store", "SCM_RIGHTS", "compileall"):
                 self.assertNotIn(internal, text)
 
+    def test_image_release_documents_the_four_asset_layout(self):
+        release = (ROOT / "doc/releasing.md").read_text()
+        self.assertIn("exactly four assets", release)
+        for asset in ("SHA256SUMS", "RELEASE_NOTES.md",
+                      "satip-sources-and-licences-v0.1.1.tar.gz"):
+            self.assertIn(asset, release)
+        self.assertIn("copyleft corresponding sources", release)
+        self.assertNotIn("RELEASE_SHA256SUMS", release)
+        self.assertNotIn("VERIFY.md", release)
+        manual = (ROOT / "doc/user-manual.md").read_text()
+        self.assertIn("**SHA256SUMS**", manual)
+        self.assertIn("both the ZIP and extracted", manual)
+
     def test_current_documentation_inventory_matches_build_and_routes(self):
         from satip_controller.manual import GUIDES
         from scripts.source_manifest import BUILD_GUIDES
