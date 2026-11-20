@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remove the legacy boot-file initialization override and HDMI splash overrides.
 
 ### Fixed
+- Update vulnerable zeroconf, Starlette, AnyIO, idna and certifi selections in
+  application dependencies, Linux tests and the actual Buildroot image, with
+  reviewed source/license hashes and installed-version verification.
+- Distrust the compromised emSign ECC Root CA G3 in the image’s system CA store.
+- Reject malformed/duplicate Host fields and use routed paths for device
+  maintenance and channel-only versus complete configuration backup decisions.
 - Preserve specific time-shift capture failure causes and terminal health counters,
   distinguishing interrupted TV input from USB problems. Bound automatic retries
   across repeated runtime failures instead of resetting backoff at process startup.

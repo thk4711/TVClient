@@ -1,6 +1,7 @@
 """Shared HTTP boundaries for setup and normal management."""
 import asyncio
 import fcntl
+import re
 import socket
 import struct
 from urllib.parse import urlsplit
@@ -54,8 +55,14 @@ class LocalHostMiddleware:
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
             try:
-                host = dict(scope["headers"]).get(b"host", b"").decode("ascii")
-                valid = urlsplit("http://" + host).hostname in self.provider()
+                hosts = [value for name, value in scope["headers"] if name == b"host"]
+                host = hosts[0].decode("ascii") if len(hosts) == 1 else ""
+                # This appliance accepts IPv4 and DNS names, not URL syntax.
+                # urlsplit().hostname alone also accepts paths, userinfo and
+                # queries, which can poison Starlette's reconstructed URL.
+                match = re.fullmatch(r"([A-Za-z0-9.-]+)(?::([0-9]{1,5}))?", host)
+                valid = bool(match and (match[2] is None or 0 < int(match[2]) <= 65535)
+                             and match[1].lower() in self.provider())
             except (ValueError, UnicodeError, OSError):
                 valid = False
             if not valid:

@@ -29,6 +29,16 @@ jobs:
       - run: mypy
       - run: python -m build
       - run: python scripts/check_package.py dist/*.whl dist/*.tar.gz
+  python-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: python -m pip install pip-audit==2.10.1
+      - name: Audit the complete pinned target Python dependency inventory
+        run: pip-audit --strict --no-deps --disable-pip -r tests/buildroot-requirements.txt
   buildroot-config:
     runs-on: ubuntu-latest
     steps:

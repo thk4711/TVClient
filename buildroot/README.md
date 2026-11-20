@@ -75,6 +75,27 @@ inventory, including the [examples guide](../examples/README.md) when present.
 Image assembly refreshes firmware `config.txt` and `cmdline.txt` from board sources
 on every run, so firmware package stamps cannot retain old boot settings.
 
+### Python security updates
+
+The upstream checkout remains at `2026.05.2`, with narrowly scoped package
+overrides in `external/security-overrides.mk`: zeroconf `0.149.16`, Starlette
+`1.3.1`, AnyIO `4.14.2`, idna `3.15` and certifi `2026.10.19`. The defconfig
+loads these before upstream recipe evaluation through `BR2_PACKAGE_OVERRIDE_FILE`.
+Reviewed source and license hashes cover both target and applicable host packages;
+upstream build backends and their dependencies are retained. No checkout edits,
+unverified pip provisioning, or unrelated media upgrades are required.
+
+Configuration-only checks also evaluate the actual package recipes and reject
+ignored version/source/hash overrides. Image validation checks installed wheel
+metadata and records the exact security dependency versions in build metadata.
+The post-build hook removes the compromised emSign ECC Root CA G3 by its DER
+SHA-256 fingerprint from the system bundle, source certificate and hashed aliases,
+protecting OpenSSL/stdlib clients as well as clients using the updated certifi.
+
+Use a **fresh output directory** for these changes. Existing SD cards remain
+unchanged; application-only deployment does not update their Python dependencies
+or system trust store. A rebuilt image still needs fresh-card hardware acceptance.
+
 The default-enabled [stage-three Tvheadend idle-mux patch](../doc/channel-switching.md#same-transponder-mux-grace)
 is a native package input. Image validation verifies its patched source hashes
 and compiled objects. It requires a **fresh output**, even if the application

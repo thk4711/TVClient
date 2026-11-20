@@ -152,6 +152,10 @@ class BuildHookTests(unittest.TestCase):
         source.mkdir(parents=True)
         shutil.copy(ROOT / "buildroot/build.sh", source)
         shutil.copy(ROOT / "buildroot/validate-config.py", source)
+        shutil.copy(ROOT / "buildroot/validate-security.py", source)
+        validator = source / "external/board/satip/validate-app-build.py"
+        validator.parent.mkdir(parents=True)
+        shutil.copy(BOARD / "validate-app-build.py", validator)
         check = source / "validate-checkout.sh"
         check.write_text("#!/bin/sh\nexit 0\n")
         check.chmod(0o755)
@@ -164,8 +168,20 @@ class BuildHookTests(unittest.TestCase):
         fail.touch()
         self.executable(self.bin / "make", r"""import os,sys
 from pathlib import Path
+import runpy
 root=Path(os.environ['FIXTURE_ROOT'])
 with (root/'calls').open('a') as stream: stream.write('make\n')
+if 'printvars' in sys.argv:
+    external = Path(next(arg.split('=', 1)[1] for arg in sys.argv if arg.startswith('BR2_EXTERNAL=')))
+    versions = runpy.run_path(str(external/'board/satip/validate-app-build.py'))['SECURITY_VERSIONS']
+    names = next(arg.removeprefix('VARS=') for arg in sys.argv if arg.startswith('VARS=')).split()
+    for key in names:
+        name, _, field = key.removeprefix('HOST_').removeprefix('PYTHON_').partition('_')
+        name = name.lower(); version = versions[name]
+        value = (str(external/f'patches/python-{name}/{version}/python-{name}.hash') if field == 'HASH_FILES' else
+                 f'{name}-{version}.tar.gz' if field == 'SOURCE' else version)
+        print(key + '=' + value)
+    sys.exit(0)
 if (root/'fail-once').exists():
     (root/'fail-once').unlink(); sys.exit(1)
 output=Path(next(arg[2:] for arg in sys.argv if arg.startswith('O=')))
@@ -181,11 +197,11 @@ output=Path(next(arg[2:] for arg in sys.argv if arg.startswith('O=')))
         self.assertFalse((output / ".config").exists())
         result = run()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual((self.root / "calls").read_text(), "make\nmake\n")
+        self.assertEqual((self.root / "calls").read_text(), "make\nmake\nmake\n")
         (output / ".config").write_text("interactive config\n")
         self.assertNotEqual(run().returncode, 0)
         self.assertEqual((output / ".config").read_text(), "interactive config\n")
-        self.assertEqual((self.root / "calls").read_text(), "make\nmake\n")
+        self.assertEqual((self.root / "calls").read_text(), "make\nmake\nmake\n")
 
     def test_post_image_refreshes_stale_boot_configuration_on_every_run(self):
         board, images = self.root / "board", self.root / "images"

@@ -173,6 +173,18 @@ class WebReliabilityTests(Fixture, unittest.TestCase):
             self.assertEqual(response.status_code, 413)
         self.backend.save.assert_not_awaited()
 
+    def test_malformed_host_authorities_are_rejected(self):
+        for host in ("testserver:8080/api/device?ignored=", "testserver/path",
+                     "testserver?query", "testserver#fragment",
+                     "user@testserver", "testserver:", "testserver:0",
+                     "testserver:65536", "testserver:abc", "testserver "):
+            with self.subTest(host=host):
+                self.assertEqual(self.client.get("/", headers={"host": host}).status_code, 400)
+        for host in ("testserver", "testserver:8080", "TESTSERVER:8080"):
+            self.assertEqual(self.client.get("/", headers={"host": host}).status_code, 200)
+        self.assertEqual(self.client.get("/", headers=[("host", "testserver"),
+                                                       ("host", "evil.example")]).status_code, 400)
+
     def test_strict_requests_and_revision_precondition(self):
         response = self.client.post("/api/scan", json={"confirm_pause": "true"})
         self.assertEqual(response.status_code, 422)

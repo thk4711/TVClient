@@ -22,12 +22,14 @@ BUILD_EXTERNAL_FILES = """
 Config.in
 external.desc
 external.mk
+security-overrides.mk
 configs/satip_rpi4_64_defconfig
 board/satip/busybox.fragment
 board/satip/cmdline.txt
 board/satip/config.txt
 board/satip/genimage.cfg
 board/satip/install-documentation.py
+board/satip/install-ca-trust.py
 board/satip/install-hdmi-edid.py
 board/satip/install-input-map.py
 board/satip/install-splash.py
@@ -75,6 +77,11 @@ patches/ffmpeg/0001-rpi-v4l2-m2m.patch
 patches/ffmpeg/rpi-v4l2-m2m.json
 patches/tvheadend/0001-idle-mux-grace.patch
 patches/tvheadend/idle-mux-grace.json
+patches/python-zeroconf/0.149.16/python-zeroconf.hash
+patches/python-starlette/1.3.1/python-starlette.hash
+patches/python-anyio/4.14.2/python-anyio.hash
+patches/python-idna/3.15/python-idna.hash
+patches/python-certifi/2026.10.19/python-certifi.hash
 """.split()
 BUILD_MODULES = {
     "satip_controller": """
@@ -109,7 +116,7 @@ BUILD_FILES = frozenset({
         "channels", "search", "settings-mobile", "sources", "flash", "connections",
         "wifi", "enigma", "bouquets", "ir-wiring")),
     *("buildroot/" + name for name in ("build.sh", "validate-checkout.sh",
-      "validate-config.py", "build-metadata.py", "validate-artifacts.sh")),
+      "validate-config.py", "validate-security.py", "build-metadata.py", "validate-artifacts.sh")),
     *("buildroot/external/" + name for name in BUILD_EXTERNAL_FILES),
     *(f"{package}/{name}.py" for package, names in BUILD_MODULES.items() for name in names),
     *("satip_controller/static/" + name for name in STATIC_FILES),

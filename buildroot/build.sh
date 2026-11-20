@@ -68,6 +68,7 @@ if [ ! -e "$output/.config" ] && [ ! -L "$output/.config" ]; then
         BR2_DL_DIR="$cache" satip_rpi4_64_defconfig
 fi
 python3 "$script/validate-config.py" "$output/.config" "$defconfig"
+python3 "$script/validate-security.py" "$checkout" "$output"
 [ "$configure_only" -eq 0 ] || exit 0
 # Lokale Paketstempel erkennen geänderte Python-/Grafikquellen nicht automatisch.
 # Nur die beiden lokalen Pakete neu übernehmen.

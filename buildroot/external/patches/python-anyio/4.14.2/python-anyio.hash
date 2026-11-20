@@ -1,0 +1,4 @@
+# Source sha256 from https://pypi.org/pypi/anyio/4.14.2/json
+sha256  cfa139f3ed1a23ee8f88a145ddb5ac7605b8bbfd8592baacd7ce3d8bb4313c7f  anyio-4.14.2.tar.gz
+# License sha256 computed from the verified source archive.
+sha256  5361ac9dc58f2ef5fd2e9b09c68297c17f04950909bbc8023bdb82eacf22c2b0  LICENSE

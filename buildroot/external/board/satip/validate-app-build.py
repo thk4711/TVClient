@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline package/source checks, not target execution or database qualification."""
 import hashlib
+from email.parser import Parser
 import json
 from pathlib import Path
 import re
@@ -10,6 +11,26 @@ import sys
 
 PACKAGES = ("satip_controller", "satip_appliance")
 STATIC_SUFFIXES = (".html", ".js", ".css", ".txt")
+SECURITY_VERSIONS = {
+    "zeroconf": "0.149.16", "starlette": "1.3.1", "anyio": "4.14.2",
+    "idna": "3.15", "certifi": "2026.10.19",
+}
+
+
+def validate_dependency_versions(site):
+    """Read installed wheel metadata without executing AArch64 target code."""
+    versions = {name: [] for name in SECURITY_VERSIONS}
+    for path in sorted(Path(site).glob("*.dist-info/METADATA")):
+        if path.is_symlink() or path.parent.is_symlink():
+            raise ValueError("Linked target Python dependency metadata")
+        metadata = Parser().parsestr(path.read_text())
+        name = (metadata.get("Name") or "").lower().replace("_", "-")
+        if name in versions:
+            versions[name].append(metadata.get("Version"))
+    for name, expected in SECURITY_VERSIONS.items():
+        if versions[name] != [expected]:
+            raise ValueError(f"Incorrect target Python security dependency: {name}; use a fresh output")
+    return dict(SECURITY_VERSIONS)
 
 
 def source_files(repo):
@@ -125,9 +146,10 @@ def validate(target, output, repo, checkout):
         raise ValueError("Missing target SAT-IP XML parser")
     if not list((stdlib / "lib-dynload").glob("zlib*.so")):
         raise ValueError("Missing target Python zlib (required by HTTPX management/preview)")
-    for module in ("evdev", "zeroconf", "ifaddr", "fastapi", "uvicorn", "httpx", "starlette", "pydantic", "pydantic_core"):
+    for module in ("evdev", "zeroconf", "ifaddr", "fastapi", "uvicorn", "httpx", "starlette", "pydantic", "pydantic_core", "anyio", "idna", "certifi"):
         if not (site / module).is_dir():
             raise ValueError("Missing target Python dependency")
+    dependency_versions = validate_dependency_versions(site)
     binary = target / "usr/bin/tvheadend"
     if binary.read_bytes()[:4] != b"\x7fELF":
         raise ValueError("Missing backend ELF")
@@ -137,6 +159,7 @@ def validate(target, output, repo, checkout):
         if not re.search(r"^#define\s+ENABLE_" + feature + r"\s+" + value + r"\b", text, re.M):
             raise ValueError("Incorrect backend SAT-IP client/server feature selection")
     result = {"schema": 1, "application_version": "0.1.0", "files": hashes,
+              "python_security_dependencies": dependency_versions,
               "backend_revision": "37453bc3fe5f9e10f3428ebb1abdc613f8b07186",
               "backend_database_qualified": False, "persistent_schema": 1,
               "backend_mux_grace": validate_mux_grace(output, repo)}

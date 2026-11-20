@@ -17,8 +17,11 @@ Use a trusted LAN. The application serves HTTP, not TLS; HTTP Basic encodes
 credentials without encrypting them. The bundled Dropbear disables SSH forwarding.
 Do not forward the browser or backend ports to the internet.
 
-The appliance validates Host against its current local IPv4 addresses and hostname
-on each request. Same-origin checks when Origin is supplied and the required
+The appliance validates Host syntax and matches it against its current local IPv4
+addresses and hostname on each request. Duplicate Host fields, URL paths, queries,
+fragments, userinfo and invalid ports are rejected. Maintenance and backup-kind
+decisions use the actual ASGI request path, not a reconstructed URL. Same-origin
+checks when Origin is supplied and the required
 `X-Satip-Action: 1` header protect browser actions, but do not replace login.
 There is no per-user management role system. CSP, no-store, frame denial and
 MIME-sniffing headers provide additional browser protections.
@@ -28,6 +31,24 @@ rights allow mapping, mux and ACL-range changes; the browser never receives
 those credentials. Root passwords are hashed on-device; browser/Wi-Fi secrets
 remain protected data. Optional FAT preferences are cleaned up after successful
 import; ordinary flash-file deletion is not secure erasure.
+
+## Dependency and TLS trust updates
+
+The Buildroot image applies reviewed security overrides for zeroconf, Starlette,
+AnyIO, idna and certifi; see [image security updates](../buildroot/README.md#python-security-updates).
+CI checks the pinned Python dependency inventory, and image validation records
+the installed security versions. The system CA store also excludes the compromised
+emSign ECC Root CA G3, identified by DER SHA-256
+`86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b`.
+TLS verification remains enabled.
+
+mDNS advertisement listens for unauthenticated LAN packets in the root device
+helper process. A browser password does not protect this listener. LAN isolation
+reduces exposure but does not replace updating vulnerable dependencies.
+
+These are image changes: updating application modules alone does not patch an
+existing receiver’s dependencies or CA store. Build and qualify a fresh image;
+there is still no automatic firmware-update mechanism.
 
 ## Credential separation
 

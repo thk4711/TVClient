@@ -1,0 +1,4 @@
+# Source sha256 from https://pypi.org/pypi/certifi/2026.10.19/json
+sha256  035c1e85572b141bf1c3a3eff0e33a8eb74917522f2559075ff8d2fea780a1ae  certifi-2026.10.19.tar.gz
+# License sha256 computed from the verified source archive.
+sha256  e93716da6b9c0d5a4a1df60fe695b370f0695603d21f6f83f053e42cfc10caf7  LICENSE

@@ -1,0 +1,4 @@
+# Source sha256 from https://pypi.org/pypi/zeroconf/0.149.16/json
+sha256  5e6b5a3b153c2cc2a8d9e6f6f189ec5638f7d9c86fc3e88a6c53eb6863761a5e  zeroconf-0.149.16.tar.gz
+# License sha256 computed from the verified source archive.
+sha256  4d1d974999ae8655ee47afb47ac3b327cd1baeea3509aecb35341ba1a1a53c94  COPYING

@@ -37,13 +37,13 @@ def install(app, login_path, helper=request, backup_root=Path("/run"), require_a
     async def maintenance(request, call_next):
         if (request.method not in ("GET", "HEAD")
                 and (backup_root / "satip-backup/maintenance.json").exists()
-                and request.url.path != "/api/device"):
+                and request.scope["path"] != "/api/device"):
             return JSONResponse({"detail": "Configuration maintenance is running"}, status_code=409)
         return await call_next(request)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, error):
-        if request.url.path == "/api/device":
+        if request.scope["path"] == "/api/device":
             return JSONResponse({"detail": "Invalid device settings request"}, status_code=422)
         return await request_validation_exception_handler(request, error)
 
@@ -107,7 +107,7 @@ def install(app, login_path, helper=request, backup_root=Path("/run"), require_a
                             os.fsync(out.fileno())
                     except TimeoutError:
                         raise HTTPException(408, "Backup upload timed out") from None
-                return await call("backup_channels_validate" if incoming.url.path.startswith("/api/device/channels/") else "backup_validate", {"id": identifier})
+                return await call("backup_channels_validate" if incoming.scope["path"].startswith("/api/device/channels/") else "backup_validate", {"id": identifier})
             finally:
                 target.unlink(missing_ok=True)
 
@@ -117,7 +117,7 @@ def install(app, login_path, helper=request, backup_root=Path("/run"), require_a
         if not TOKEN.fullmatch(identifier):
             raise HTTPException(422, "Invalid backup identifier")
         status = await call("backup_status", {"id": identifier})
-        channels = incoming.url.path.startswith("/api/device/channels/")
+        channels = incoming.scope["path"].startswith("/api/device/channels/")
         if status.get("state") != "ready" or status.get("kind", "configuration") != ("channels" if channels else "configuration"):
             raise HTTPException(409, "Backup is not ready or has expired")
         from datetime import datetime, timezone

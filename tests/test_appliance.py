@@ -197,7 +197,7 @@ class PackageTests(unittest.TestCase):
         for name in ("satip_controller", "satip_appliance"):
             shutil.copytree(ROOT / name, self.repo / name, ignore=shutil.ignore_patterns("__pycache__", ".DS_Store"))
             shutil.copytree(self.repo / name, self.target / "opt/satip" / name)
-        for module in ("evdev", "zeroconf", "ifaddr", "fastapi", "uvicorn", "httpx", "starlette", "pydantic", "pydantic_core"):
+        for module in ("evdev", "zeroconf", "ifaddr", "fastapi", "uvicorn", "httpx", "starlette", "pydantic", "pydantic_core", "anyio", "idna", "certifi"):
             (self.target / "usr/lib/python3.14/site-packages" / module).mkdir(parents=True)
         (self.target / "usr/bin").mkdir(parents=True)
         (self.target / "usr/bin/tvheadend").write_bytes(b"\x7fELFfixture")
@@ -227,12 +227,38 @@ class PackageTests(unittest.TestCase):
                 obj.write_bytes(b"\x7fELFfixture")
         manifest_path.write_text(json.dumps(manifest))
         self.validator = load("app_validator", BOARD / "validate-app-build.py")
+        for name, version in self.validator.SECURITY_VERSIONS.items():
+            metadata = self.target / "usr/lib/python3.14/site-packages" / (name + "-" + version + ".dist-info/METADATA")
+            metadata.parent.mkdir(parents=True)
+            metadata.write_text(f"Name: {name}\nVersion: {version}\n")
 
     def test_all_static_sources_and_backend_features_are_recorded(self):
         result = self.validator.validate(self.target, self.output, self.repo, self.root)
         self.assertIn("satip_controller/static/hls-LICENSE.txt", result["files"])
         self.assertIn("satip_appliance/supervisor.py", result["files"])
         self.assertFalse(result["backend_database_qualified"])
+        self.assertEqual(result["python_security_dependencies"], self.validator.SECURITY_VERSIONS)
+
+    def test_missing_stale_duplicate_and_linked_dependency_metadata_refused(self):
+        site = self.target / "usr/lib/python3.14/site-packages"
+        metadata = site / "starlette-1.3.1.dist-info/METADATA"
+        metadata.unlink()
+        with self.assertRaisesRegex(ValueError, "security dependency: starlette"):
+            self.validator.validate_dependency_versions(site)
+        metadata.write_text("Name: starlette\nVersion: 1.0.0\n")
+        with self.assertRaisesRegex(ValueError, "security dependency: starlette"):
+            self.validator.validate_dependency_versions(site)
+        metadata.write_text("Name: starlette\nVersion: 1.3.1\n")
+        duplicate = site / "starlette-1.0.0.dist-info/METADATA"
+        duplicate.parent.mkdir()
+        duplicate.write_text("Name: starlette\nVersion: 1.0.0\n")
+        with self.assertRaisesRegex(ValueError, "security dependency: starlette"):
+            self.validator.validate_dependency_versions(site)
+        duplicate.unlink()
+        metadata.unlink()
+        metadata.symlink_to(self.root / "outside")
+        with self.assertRaisesRegex(ValueError, "Linked target"):
+            self.validator.validate_dependency_versions(site)
 
     def test_stale_native_mux_grace_source_and_object_are_rejected(self):
         backend = self.configuration.parent.parent
