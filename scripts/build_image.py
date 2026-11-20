@@ -7,6 +7,7 @@ import argparse
 import configparser
 from datetime import datetime, timezone
 import hashlib
+import inspect
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -272,16 +273,35 @@ def guard(args, request):
         run(command, capture=True)
 
 
-def verify(directory, expected_inputs, identity=None):
+def read_checksums(path, names):
+    if path.is_symlink() or not path.is_file():
+        raise BuildError("invalid artifact checksum manifest")
     sums = {}
-    for line in (directory / "SHA256SUMS").read_text().splitlines():
+    for line in path.read_text().splitlines():
         match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_.-]+)", line)
-        if not match or match[2] in sums or match[2] not in ARTIFACTS:
+        if not match or match[2] in sums or match[2] not in names:
             raise BuildError("invalid artifact checksum manifest")
         sums[match[2]] = match[1]
-    if set(sums) != set(ARTIFACTS):
+    if set(sums) != set(names):
         raise BuildError("artifact checksum manifest is incomplete")
+    return sums
+
+
+def verify(directory, expected_inputs, identity=None, *, zip_image=False):
+    build_manifest = directory / "BUILD_SHA256SUMS"
+    sums = read_checksums(build_manifest if build_manifest.exists() else directory / "SHA256SUMS", ARTIFACTS)
+    collected = dict(sums)
+    if zip_image:
+        zip_sums = read_checksums(directory / "ZIP_SHA256SUMS", ("sdcard.img.zip",))
+        archive = directory / "sdcard.img.zip"
+        if archive.is_symlink() or not archive.is_file() or sha256(archive) != zip_sums[archive.name]:
+            raise BuildError("artifact checksum mismatch: sdcard.img.zip")
+        verify_zip(archive, sums["sdcard.img"])
+        del collected["sdcard.img"]
+        collected.update(zip_sums)
     for name, digest in sums.items():
+        if zip_image and name == "sdcard.img":
+            continue
         path = directory / name
         if path.is_symlink() or not path.is_file() or path.stat().st_size == 0 or sha256(path) != digest:
             raise BuildError(f"artifact checksum mismatch: {name}")
@@ -299,16 +319,15 @@ def verify(directory, expected_inputs, identity=None):
     config = directory / "resolved.config"
     if config.is_symlink() or sha256(config) != metadata.get("resolved_config_sha256"):
         raise BuildError("resolved configuration does not match image metadata")
-    return sums
+    if build_manifest.exists() and read_checksums(directory / "SHA256SUMS", collected) != collected:
+        raise BuildError("collected artifact checksums do not match build verification")
+    return collected
 
 
-def package_image(directory, expected):
-    image = directory / "sdcard.img"
-    archive = directory / "sdcard.img.zip"
-    with zipfile.ZipFile(archive, "x", zipfile.ZIP_DEFLATED, allowZip64=True) as zipped:
-        zipped.write(image, "sdcard.img")
+def verify_zip(archive, expected):
+    """Stream the single ZIP member to check CRC and digest without extracting it."""
     with zipfile.ZipFile(archive) as zipped:
-        if zipped.namelist() != ["sdcard.img"] or zipped.testzip() is not None:
+        if zipped.namelist() != ["sdcard.img"] or zipped.getinfo("sdcard.img").file_size == 0:
             raise BuildError("ZIP integrity check failed")
         digest = hashlib.sha256()
         with zipped.open("sdcard.img") as stream:
@@ -316,7 +335,31 @@ def package_image(directory, expected):
                 digest.update(block)
         if digest.hexdigest() != expected:
             raise BuildError("ZIP image checksum mismatch")
+
+
+def package_image(directory, expected, *, image=None):
+    image = image if image is not None else directory / "sdcard.img"
+    archive = directory / "sdcard.img.zip"
+    if image.is_symlink() or not image.is_file() or image.stat().st_size == 0:
+        raise BuildError("invalid source image for ZIP")
+    with zipfile.ZipFile(archive, "x", zipfile.ZIP_DEFLATED, allowZip64=True) as zipped:
+        zipped.write(image, "sdcard.img")
+    verify_zip(archive, expected)
     (directory / "ZIP_SHA256SUMS").write_text(f"{sha256(archive)}  sdcard.img.zip\n")
+
+
+def remote_package_command(images, destination):
+    """Use the same packaging/checksum code remotely, without staging the wrapper."""
+    code = "import hashlib,re,sys,zipfile\nfrom pathlib import Path\n"
+    code += "class BuildError(RuntimeError): pass\n"
+    code += "\n".join(inspect.getsource(function) for function in
+                      (sha256, read_checksums, verify_zip, package_image))
+    code += "\nimages=Path(sys.argv[1]); destination=Path(sys.argv[2])\n"
+    code += "for path in [destination,*destination.parents]:\n    if path.is_symlink(): raise BuildError('symlink in ZIP output path refused')\n"
+    code += "destination.mkdir()\n"
+    code += "sums=read_checksums(images/'SHA256SUMS', " + repr(ARTIFACTS) + ")\n"
+    code += "package_image(destination, sums['sdcard.img'], image=images/'sdcard.img')\n"
+    return shlex.join(["python3", "-c", code, images, destination])
 
 
 WORKER = r'''
@@ -341,8 +384,11 @@ def main(argv=None):
     environment = {"BUILDROOT_DIR": args.buildroot_dir, "SATIP_OUTPUT_DIR": args.output_dir,
                    "BR2_DL_DIR": args.download_cache}
     build = [args.source + "/buildroot/build.sh", "--jobs", str(args.jobs)]
+    image_name = "sdcard.img.zip" if args.zip_image else "sdcard.img"
+    collected_names = tuple(name for name in ARTIFACTS if name != "sdcard.img")
     print(json.dumps({"execution": args.execution, "host": args.host, "source": args.source,
                       "jobs": args.jobs, "install_host_packages": args.install_host_packages,
+                      "zip_image": args.zip_image, "image_artifact": image_name,
                       **environment, "artifacts": str(destination),
                       "build": build, "staged_files": sorted(expected)}, indent=2))
     if args.dry_run:
@@ -385,27 +431,47 @@ def main(argv=None):
             ssh(args, command, log=destination / "build.log")
             remote_inflight = False
             ssh(args, shlex.join([args.source + "/buildroot/validate-artifacts.sh", args.output_dir + "/images"]))
-            for name in (*ARTIFACTS, "SHA256SUMS"):
+            images = args.output_dir + "/images"
+            image_directory = images
+            if args.zip_image:
+                image_directory = args.output_dir + "/.satip-zip-" + stamp
+                remote_inflight = True
+                ssh(args, remote_package_command(images, image_directory))
+                remote_inflight = False
+            for name in (*collected_names, "SHA256SUMS", image_name,
+                         *(("ZIP_SHA256SUMS",) if args.zip_image else ())):
+                remote_directory = image_directory if name in (image_name, "ZIP_SHA256SUMS") else images
                 run(["rsync", "-azL", "-e", transport,
-                     args.host + ":" + shlex.quote(args.output_dir + "/images/" + name), str(destination / name)])
+                     args.host + ":" + shlex.quote(remote_directory + "/" + name), str(destination / name)])
+            if args.zip_image:
+                # Remove only this run's two temporary packaging files after transfer.
+                cleanup = "from pathlib import Path; import sys; p=Path(sys.argv[1]); (p/'sdcard.img.zip').unlink(); (p/'ZIP_SHA256SUMS').unlink(); p.rmdir()"
+                ssh(args, shlex.join(["python3", "-c", cleanup, image_directory]))
             run(["rsync", "-azL", "-e", transport,
                  args.host + ":" + shlex.quote(args.output_dir + "/.config"), str(destination / "resolved.config")])
         else:
             run(build, env={**os.environ, **environment}, log=destination / "build.log")
-            for name in (*ARTIFACTS, "SHA256SUMS"):
-                shutil.copyfile(Path(args.output_dir) / "images" / name, destination / name)
+            images = Path(args.output_dir) / "images"
+            for name in (*collected_names, "SHA256SUMS"):
+                shutil.copyfile(images / name, destination / name)
+            if args.zip_image:
+                build_sums = read_checksums(destination / "SHA256SUMS", ARTIFACTS)
+                package_image(destination, build_sums["sdcard.img"], image=images / "sdcard.img")
+            else:
+                shutil.copyfile(images / image_name, destination / image_name)
             shutil.copyfile(Path(args.output_dir) / ".config", destination / "resolved.config")
-        sums = verify(destination, expected, identity)
+        sums = verify(destination, expected, identity, zip_image=args.zip_image)
         if inputs(args.repository) != expected:
             raise BuildError("local build inputs changed during the build")
         if source_identity(args.repository, expected) != identity:
             raise BuildError("originating Git identity changed during the build")
-        if args.zip_image:
-            package_image(destination, sums["sdcard.img"])
+        (destination / "SHA256SUMS").rename(destination / "BUILD_SHA256SUMS")
+        (destination / "SHA256SUMS").write_text("".join(
+            f"{digest}  {name}\n" for name, digest in sums.items()))
         (destination / "VERIFIED.json").write_text(json.dumps({"schema": 1, "profile": "development-foundation",
             "release": False, "jobs": args.jobs, "execution": args.execution,
-            "artifacts": sums}, indent=2) + "\n")
-        print(f"Verified foundation image: {destination / 'sdcard.img'}")
+            "zip_image": args.zip_image, "artifacts": sums}, indent=2) + "\n")
+        print(f"Verified foundation image: {destination / image_name}")
         print("No flashing, application playback qualification or SWU generation performed.")
     finally:
         if remote_inflight:

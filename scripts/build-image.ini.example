@@ -6,11 +6,16 @@ host = build-user@build-host
 ssh_port = 22
 remote_root = /home/build-user/embedded/satip
 jobs = 16
+# Collect only sdcard.img.zip when true, or only sdcard.img when false.
+# Remote builds compress on the build host before transferring the image.
 zip_image = true
 # Opt-in Debian prerequisites on the build host (requires non-interactive sudo).
 install_host_packages = false
 # Defaults derive from remote_root; remote paths must be absolute/normalized.
 # buildroot_dir = /home/build-user/embedded/satip/buildroot
-# output_dir = /home/build-user/embedded/satip/output/rpi4-64
+# Use a fresh output directory after defconfig changes or an
+# 'output belongs to another source/config' error. Choose an unused name;
+# keep the old output and its ownership marker intact. Checkout/cache can be reused.
+output_dir = /home/build-user/embedded/satip/output/rpi4-64-current
 # download_cache = /home/build-user/embedded/dl
 # artifacts_dir = /absolute/local/path/to/artifacts

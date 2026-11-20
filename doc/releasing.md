@@ -237,7 +237,10 @@ shasum -a 256 -c ZIP_SHA256SUMS
 ~~~
 
 Extract `sdcard.img.zip` and compare `sdcard.img` with its entry in the authenticated
-raw-image checksum manifest. If downloading the full raw artifact set, use
+raw-image checksum manifest (`BUILD_SHA256SUMS` for current wrapper builds;
+include this file in the authenticated release assets). `SHA256SUMS` describes
+the collected ZIP or raw artifacts, not an extracted image in ZIP mode.
+If downloading the full collected artifact set, use
 `sha256sum -c SHA256SUMS` (or `shasum -a 256 -c SHA256SUMS` on macOS). A full manifest
 check requires all listed files; a missing file is not a successful check.
 

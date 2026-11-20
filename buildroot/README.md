@@ -153,12 +153,19 @@ before removing only the matching token file and empty lock directory.
 Each run retains a unique `artifacts/satip-foundation-<UTC time>-<id>/` directory.
 Existing artifacts are never overwritten. A completed set contains:
 
-- `sdcard.img`, standalone `rootfs.ext4`, `Image`, `bcm2711-rpi-4-b.dtb`,
-  `satip-build.json`, and `SHA256SUMS`.
+- Exactly one SD image: `sdcard.img.zip` with `zip_image = true` / `--zip`
+  (default), or `sdcard.img` with `zip_image = false` / `--no-zip`.
+- Standalone `rootfs.ext4`, `Image`, `bcm2711-rpi-4-b.dtb`, `satip-build.json`,
+  and `SHA256SUMS` covering only the collected artifacts. `BUILD_SHA256SUMS`
+  preserves the original build manifest, including the raw SD-image digest.
 - `build.log`, `source-inputs.json` and `resolved.config`. Remote logs also remain
   under `<remote_root>/logs/`.
-- Optional `sdcard.img.zip` (default enabled) and `ZIP_SHA256SUMS`; member inventory,
-  CRC and raw image digest are checked. The raw image is retained.
+- ZIP mode also includes `ZIP_SHA256SUMS`. Member inventory, CRC and raw image
+  digest are checked by streaming the archive without extracting a second image.
+  Remote builds compress on the build host and transfer only the ZIP. Successful
+  transfers remove the run-specific temporary remote ZIP files; interrupted runs
+  may leave them under `<output_dir>/.satip-zip-<time>-<id>/`. The raw image remains
+  in Buildroot's build-host output, not in the local ZIP artifact directory.
 - `VERIFIED.json`, written last after checksums, source/configuration and ZIP checks.
   Missing this marker means the set is not successfully verified.
 
@@ -202,7 +209,8 @@ image flash replaces data. Keep the working card and private backups untouched.
 For a published image, obtain checksums and their signature/attestation from the
 same release and verify them as described in [Releasing](../doc/releasing.md#recipient-verification).
 For your own build, require `VERIFIED.json` and check `SHA256SUMS` in its artifact
-directory. Extract the optional ZIP, then use Raspberry Pi Imager's **Use custom**
+directory. In ZIP mode, extract the image for flashing; its raw digest is recorded
+in `BUILD_SHA256SUMS`. Then use Raspberry Pi Imager's **Use custom**
 image option to select `sdcard.img`; select the test SD card and enable write
 verification. Use the project's FAT provisioning file rather than Imager's OS
 customization options. Eject/reinsert the card if needed to mount its FAT partition.

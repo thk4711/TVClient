@@ -470,6 +470,36 @@ class BuildImageTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             build.package_image(self.root, build.sha256(self.root / "sdcard.img"))
 
+    def test_zip_only_artifacts_are_verified_without_extraction(self):
+        expected = self.artifacts()
+        raw_digest = build.sha256(self.root / "sdcard.img")
+        build.package_image(self.root, raw_digest)
+        (self.root / "sdcard.img").unlink()
+        sums = build.verify(self.root, expected, zip_image=True)
+        self.assertNotIn("sdcard.img", sums)
+        self.assertEqual(sums["sdcard.img.zip"], build.sha256(self.root / "sdcard.img.zip"))
+        self.assertFalse((self.root / "sdcard.img").exists())
+        (self.root / "sdcard.img.zip").write_bytes(b"corrupt")
+        with self.assertRaisesRegex(build.BuildError, "checksum mismatch"):
+            build.verify(self.root, expected, zip_image=True)
+
+    def test_zip_member_digest_inventory_and_crc_are_checked(self):
+        import zipfile
+        archive = self.root / "sdcard.img.zip"
+        digest = hashlib.sha256(b"expected-image").hexdigest()
+        for names in (("sdcard.img",), ("other.img",), ("sdcard.img", "extra")):
+            with self.subTest(names=names):
+                with zipfile.ZipFile(archive, "w", zipfile.ZIP_STORED) as zipped:
+                    for name in names:
+                        zipped.writestr(name, b"wrong-image")
+                with self.assertRaises(build.BuildError):
+                    build.verify_zip(archive, digest)
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_STORED) as zipped:
+            zipped.writestr("sdcard.img", b"expected-image")
+        archive.write_bytes(archive.read_bytes().replace(b"expected-image", b"modified-image"))
+        with self.assertRaises(zipfile.BadZipFile):
+            build.verify_zip(archive, digest)
+
     def test_artifact_origin_must_match_local_commit(self):
         expected = self.artifacts()
         identity = {"source_commit": "a" * 40, "source_dirty": False,
@@ -535,9 +565,82 @@ class BuildImageTests(unittest.TestCase):
         result, = (self.root / "artifacts").iterdir()
         self.assertTrue((result / "VERIFIED.json").exists())
         self.assertTrue((result / "sdcard.img.zip").exists())
+        self.assertFalse((result / "sdcard.img").exists())
+        self.assertTrue((self.root / "output/images/sdcard.img").exists())
+        manifest = build.read_checksums(result / "SHA256SUMS",
+                                        ("sdcard.img.zip", *build.ARTIFACTS[1:]))
+        self.assertEqual(manifest, json.loads((result / "VERIFIED.json").read_text())["artifacts"])
+        build.verify(result, build.inputs(Path(args[1])), zip_image=True)
         self.assertFalse((result / "rootfs.ext4").is_symlink())
         self.assertFalse((self.root / ".output.satip-build.lock").exists())
         self.assertFalse((self.root / ".repo.satip-source.lock").exists())
+
+    def test_local_no_zip_collects_raw_image_only(self):
+        args = self.local_args() + ["--no-zip"]
+        with patch.object(build, "run", side_effect=self.fake_build), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(build.main(args), 0)
+        result, = (self.root / "artifacts").iterdir()
+        self.assertTrue((result / "sdcard.img").exists())
+        self.assertFalse((result / "sdcard.img.zip").exists())
+        self.assertFalse((result / "ZIP_SHA256SUMS").exists())
+        build.verify(result, build.inputs(Path(args[1])))
+
+    def test_remote_transfers_only_selected_image_format(self):
+        for zip_image in (True, False):
+            with self.subTest(zip_image=zip_image):
+                root = self.root / str(zip_image)
+                repo = self.repository("repo-" + str(zip_image))
+                remote_root = root / "remote"
+                output = remote_root / "output/rpi4-64"
+                args = ["--execution", "remote", "--host", "builder@example",
+                        "--repository", str(repo), "--remote-root", str(remote_root),
+                        "--artifacts-dir", str(root / "artifacts"),
+                        "--zip" if zip_image else "--no-zip"]
+                transferred = []
+                def remote(args, command, **kwargs):
+                    parts = shlex.split(command)
+                    if kwargs.get("log"):
+                        environment = dict(part.split("=", 1) for part in parts[1:parts.index("python3")])
+                        return self.fake_build([str(repo / "buildroot/build.sh"), "--jobs", "16"],
+                                               env=environment, log=kwargs["log"])
+                    if parts[:2] == ["python3", "-c"] and ("destination.mkdir()" in parts[2] or "p.rmdir()" in parts[2]):
+                        result = subprocess.run(parts, capture_output=True, text=True)
+                        if result.returncode:
+                            raise build.BuildError(result.stderr)
+                    return ""
+                def transfer(argv, **kwargs):
+                    if "--files-from=" in " ".join(argv):
+                        return ""  # Staging is independent of this simulated artifact transfer.
+                    source = Path(shlex.split(argv[-2].split(":", 1)[1])[0])
+                    transferred.append(source.name)
+                    shutil.copyfile(source, argv[-1])
+                    return ""
+                with patch.object(build, "ssh", side_effect=remote), patch.object(build, "run", side_effect=transfer), \
+                        patch.object(build, "guard"), contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(build.main(args), 0)
+                result, = (root / "artifacts").iterdir()
+                selected = "sdcard.img.zip" if zip_image else "sdcard.img"
+                other = "sdcard.img" if zip_image else "sdcard.img.zip"
+                self.assertIn(selected, transferred)
+                self.assertNotIn(other, transferred)
+                self.assertTrue((result / selected).exists())
+                self.assertFalse((result / other).exists())
+                self.assertTrue((output / "images/sdcard.img").exists())
+                self.assertEqual(list(output.glob(".satip-zip-*")), [])
+                build.verify(result, build.inputs(repo), zip_image=zip_image)
+
+    def test_packaging_failure_never_marks_artifacts_verified(self):
+        args = self.local_args()
+        with patch.object(build, "run", side_effect=self.fake_build), \
+                patch.object(build, "package_image", side_effect=build.BuildError("ZIP failed")), \
+                contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(build.BuildError, "ZIP failed"):
+                build.main(args)
+        result, = (self.root / "artifacts").iterdir()
+        self.assertFalse((result / "VERIFIED.json").exists())
+        self.assertFalse((result / "sdcard.img").exists())
+        self.assertTrue((self.root / "output/images/sdcard.img").exists())
+        self.assertFalse((self.root / ".output.satip-build.lock").exists())
 
     def test_local_build_failure_releases_locks_and_never_marks_verified(self):
         args = self.local_args()

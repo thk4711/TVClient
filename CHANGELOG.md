@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Add opt-in installation of Debian build-host prerequisites with non-interactive
   privilege checks; dry runs and direct shell builds do not install packages.
+- Compress remote SD images before transfer and collect exactly one image format
+  (ZIP by default or raw), preserving raw and collected-artifact checksum manifests.
 - Restore Astra 19.2°E SAT-IP channel backups into a different installation’s
   channel network while preserving its settings, credentials and tuner bindings.
   Accept existing version-1 archives and add explicit source/satellite metadata
