@@ -119,6 +119,7 @@ not fetched, so the document remains readable offline.
 | [check_controller_on_pi.py](check_controller_on_pi.py) | Starts the controller/mpv/input and changes saved state; stop production first |
 | [measure_switching_on_pi.py](measure_switching_on_pi.py) | Running-player benchmark via temporary virtual keyboard; changes channels, attempts restoration |
 | [measure_timeshift_seeking_on_pi.py](measure_timeshift_seeking_on_pi.py) | Opt-in running-player pause and rapid/opposite seek timings through virtual remote events; requires live RAM mode and --confirm-interrupt, restores live, does not change USB settings |
+| [exercise_capture_failure_on_pi.py](exercise_capture_failure_on_pi.py) | Native synthetic EOF/timeout/muxer-exit checks in private tmpfs; requires root and configured storage readiness; no tuner, player controls, USB writes or marker changes |
 | [exercise_prebuffer_backpressure_on_pi.py](exercise_prebuffer_backpressure_on_pi.py) | Opt-in live-RAM test: freezes only the owned prebuffer FFmpeg via pidfd, verifies direct recovery, and resumes it in cleanup; requires root and --confirm-interrupt; never run alongside switching tests or physical controls |
 | [exercise_recovery_on_pi.py](exercise_recovery_on_pi.py) | Opt-in owned-service crash/freeze test; requires healthy idle services and interruption confirmation |
 | [monitor_playback_on_pi.py](monitor_playback_on_pi.py) | Passive allowlisted mpv/cache/rendering trace; no tuning or option changes |

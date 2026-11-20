@@ -111,8 +111,11 @@ limit. Changing the budget trims history without ending the session.
   indefinitely paused position.
 - USB disappearance, read-only storage, insufficient space, failed capture or
   unusable media returns to direct live TV with an explicit notice. Transient
-  RAM-prebuffer-start failures retry after 30, 60 and 120 seconds, then retain live TV
-  without further automatic interruptions. Pause requests an explicit retry;
+  RAM capture failures (during startup or established playback) retry after 30,
+  60 and 120 seconds, then retain direct live TV without further automatic interruptions.
+  Starting a replacement capture does not reset this budget: input and capture writes
+  and recently observed health snapshots must remain fresh for 120 seconds before
+  backoff resets; a frozen index cannot count as healthy capture. Pause requests an explicit retry;
   storage reconnection or channel changes also allow a new attempt. These retries
   never start USB writes automatically. A failed USB activation restores live
   playback/unpaused state; another Pause explicitly retries USB activation.
@@ -125,7 +128,17 @@ behind reports a capture notice rather than claiming that the USB is missing.
 One credential-free failure record survives session cleanup at
 `/run/satip-player/last-usb-failure.json` until another copier failure or reboot.
 It contains the failed operation, exception class/error number, last copied
-timestamp and RAM-index age, not programme data or credentials.
+timestamp and RAM-index age, not programme data or credentials. RAM capture also
+retains `/run/satip-player/last-capture-failure.json` (mode 0600) across session
+cleanup until another capture failure or reboot. It records a fixed reason, stage,
+exception class/error number, muxer exit status, segment count/age and terminal
+upstream/capture health counters. The terminal RAM index publishes the cause and
+these counters before potentially slow muxer teardown. If the raw relay closes
+first, live recovery allows one second for that cause to arrive; a missing cause
+still triggers bounded generic relay recovery. Neither record contains exception text, URLs, credentials,
+FFmpeg stderr or programme data. Input EOF, timeout/error and input starvation
+report **TV input interrupted**; muxer exit/segment stall report **Time-shift
+capture stopped**. These are distinct from USB readiness and write failures.
 The USB history index is published only when content/readiness/settings change;
 idle polling does not repeatedly serialize the entire retained history. RAM
 capture freshness uses elapsed monotonic time, not the device's wall clock.

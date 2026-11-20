@@ -13,6 +13,7 @@ from satip_controller.config import Config, library
 from satip_controller.coordination import preview_held
 from satip_controller.mpv_ipc import IPCError, MPVIPC
 from satip_controller.player import url
+from satip_controller.rolling import process_start
 from satip_controller.state import lease_active, read_json, runtime_path
 
 
@@ -43,9 +44,13 @@ async def exercise(args):
             raise ValueError("Requires live relay")
         token = media_path.split("/")[-2]
         directory = config.runtime_dir / ("rolling-" + token)
-        capture_pid = read_json(directory / "owner.json")["pid"]
+        owner = read_json(directory / "owner.json")
+        capture_pid = owner["pid"]
         command = (Path("/proc") / str(capture_pid) / "cmdline").read_bytes().split(bytes([0]))
-        if b"satip_controller.rolling" not in command or str(directory).encode() not in command:
+        legacy = b"satip_controller.rolling" in command and str(directory).encode() in command
+        forked = (b"satip_controller.relay_worker" in command
+                  and owner.get("start_ticks") == process_start(capture_pid))
+        if not (legacy or forked):
             raise ValueError("Capture ownership changed")
         children = []
         for proc in Path("/proc").iterdir():

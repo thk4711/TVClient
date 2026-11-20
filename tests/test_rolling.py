@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 from satip_controller.mpv_ipc import IPCError
 from satip_controller.player import Player
@@ -137,6 +137,7 @@ class BoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.ts.config["minutes"] = 1
         self.ts.buffer = Mock(error="", origin=0, segments=[segment(0, 0, 30), segment(1, 30, 60)])
         self.ts.buffer.raw_error = ""
+        self.ts.buffer.capture_failure = {}
         self.ts.buffer.live_reader = False
         self.ts.buffer.disk_error = ""
         self.ts.buffer.disk_segments = self.ts.buffer.segments
@@ -220,7 +221,8 @@ class ActivationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(c.args[0] != "loadfile" for c in self.player.ipc.command.await_args_list))
 
     async def test_missing_usb_leaves_live_picture_unchanged(self):
-        self.assertIn("USB", await self.player.timeshift_action("pause"))
+        with patch("satip_controller.timeshift.storage", return_value=None):
+            self.assertIn("USB", await self.player.timeshift_action("pause"))
         self.player.ipc.command.assert_not_awaited()
 
     async def test_channel_change_closes_history_and_loads_unpaused(self):
@@ -252,7 +254,7 @@ class ActivationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_failed_prebuffer_recovers_direct_before_retrying(self):
         ts = self.player.timeshift
-        ts.buffer = Mock(error="capture blocked", raw_error="", refresh=Mock())
+        ts.buffer = Mock(error="capture blocked", raw_error="", capture_failure={}, refresh=Mock())
         with patch("satip_controller.timeshift.storage", return_value=CONFIG):
             self.assertEqual(await ts.update(self.player.ipc, 123), "storage")
         retry_after = ts.retry_after
@@ -389,7 +391,230 @@ class ServerCloseTests(unittest.IsolatedAsyncioTestCase):
         await writer.wait_closed()
 
 
+class CaptureFailureTests(unittest.TestCase):
+    def test_input_eof_and_timeouts_retain_sanitized_cause(self):
+        from satip_controller.rolling import capture
+        from satip_controller.state import read_json
+        from urllib.error import URLError
+        import os
+        for fault, reason in ((None, "upstream_eof"),
+                              (TimeoutError("secret URL"), "upstream_timeout"),
+                              (URLError(TimeoutError("secret URL")), "upstream_timeout"),
+                              (URLError("secret URL"), "upstream_error")):
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as temp:
+                runtime = Path(temp)
+                directory = runtime / ("rolling-" + "b" * 32)
+                directory.mkdir()
+                index = runtime / (directory.name + ".json")
+                parent, parent_write = os.pipe()
+                raw_read, raw = os.pipe()
+                process = Mock(stdin=Mock(), poll=Mock(return_value=None))
+                source = MagicMock()
+                source.__enter__.return_value.read1.return_value = b""
+                def thread(target, daemon):
+                    return Mock(start=Mock(side_effect=target if target.__name__ == "pump" else None))
+                try:
+                    with patch("satip_controller.rolling.ram_storage"), \
+                            patch("satip_controller.rolling.resource.setrlimit"), \
+                            patch("satip_controller.rolling.signal.signal"), \
+                            patch("satip_controller.rolling.threading.Thread", side_effect=thread), \
+                            patch("satip_controller.rolling.subprocess.Popen", return_value=process), \
+                            patch("urllib.request.urlopen", return_value=source, side_effect=fault):
+                        capture(directory, index, parent, raw, "http://secret.invalid/private", "Authorization: secret")
+                        parent = raw = None  # capture and its pump close these
+                    record = runtime / "last-capture-failure.json"
+                    data = read_json(record)
+                    self.assertEqual(data["reason"], reason)
+                    self.assertNotIn("secret", record.read_text())
+                    self.assertEqual(read_json(index)["health"], data["health"])
+                    process.terminate.assert_called_once()
+                finally:
+                    for fd in (parent, parent_write, raw_read, raw):
+                        if fd is not None:
+                            os.close(fd)
+
+    def test_muxer_failure_keeps_terminal_health_and_private_record(self):
+        from satip_controller.rolling import capture, capture_notice
+        from satip_controller.state import read_json
+        import os
+        with tempfile.TemporaryDirectory() as temp:
+            runtime = Path(temp)
+            directory = runtime / ("rolling-" + "a" * 32)
+            directory.mkdir()
+            index = runtime / (directory.name + ".json")
+            parent, parent_write = os.pipe()
+            raw_read, raw = os.pipe()
+            process = Mock(stdin=Mock(), poll=Mock(return_value=2), wait=Mock(return_value=2))
+            try:
+                with patch("satip_controller.rolling.ram_storage"), \
+                        patch("satip_controller.rolling.resource.setrlimit"), \
+                        patch("satip_controller.rolling.signal.signal"), \
+                        patch("satip_controller.rolling.threading.Thread"), \
+                        patch("satip_controller.rolling.subprocess.Popen", return_value=process):
+                    capture(directory, index, parent, raw, "http://secret.invalid/private", "Authorization: secret")
+                    parent = None
+                data = read_json(index)
+                self.assertEqual(data["error"], capture_notice("muxer_exit"))
+                self.assertEqual(data["failure"]["muxer_returncode"], 2)
+                self.assertEqual(data["health"]["upstream_bytes"], 0)
+                self.assertIsInstance(data["health"]["upstream_age"], (int, float))
+                record = runtime / "last-capture-failure.json"
+                self.assertEqual(record.stat().st_mode & 0o777, 0o600)
+                self.assertNotIn("secret", record.read_text())
+                buffer = RollingBuffer()
+                buffer.index = index
+                buffer.refresh()
+                self.assertEqual(buffer.capture_failure["reason"], "muxer_exit")
+                self.assertEqual(buffer.diagnostics()["upstream_bytes"], 0)
+                cleanup(directory)
+                index.unlink()
+                self.assertTrue(record.exists())
+            finally:
+                for fd in (parent, parent_write, raw_read, raw):
+                    if fd is not None:
+                        os.close(fd)
+
+    def test_input_and_muxer_notices_are_distinct_and_translated(self):
+        from satip_controller.rolling import capture_notice
+        from satip_controller.i18n import GERMAN
+        for reason in ("upstream_eof", "upstream_timeout", "upstream_error", "upstream_stalled"):
+            self.assertEqual(capture_notice(reason), "TV input interrupted – returning to live TV")
+        self.assertNotEqual(capture_notice("muxer_exit"), capture_notice("upstream_timeout"))
+        for reason in ("upstream_timeout", "muxer_exit", "segment_stalled", "capture_blocked", "ram_storage"):
+            self.assertIn(capture_notice(reason), GERMAN)
+
+
 class RetryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_raw_eof_allows_capture_cause_to_arrive_before_recovery(self):
+        ts = Timeshift()
+        ts.buffer = Mock(error="", raw_error="Live TV relay unavailable", capture_failure={})
+        with patch("satip_controller.timeshift.storage", return_value=CONFIG), \
+                patch("satip_controller.timeshift.time.monotonic", return_value=100) as clock:
+            self.assertIsNone(await ts.update(Mock(), 1))
+            self.assertIsNone(ts.retry_after)
+            clock.return_value = 101
+            ts.buffer.error = "TV input interrupted – returning to live TV"
+            self.assertEqual(await ts.update(Mock(), 1), "storage")
+            self.assertEqual(ts.notice, ts.buffer.error)
+            self.assertEqual(ts.retry_after, 131)
+
+    async def test_raw_eof_without_capture_cause_still_recovers_promptly(self):
+        ts = Timeshift()
+        ts.buffer = Mock(error="", raw_error="Live TV relay unavailable", capture_failure={})
+        with patch("satip_controller.timeshift.storage", return_value=CONFIG), \
+                patch("satip_controller.timeshift.time.monotonic", return_value=100) as clock:
+            self.assertIsNone(await ts.update(Mock(), 1))
+            clock.return_value = 101
+            self.assertEqual(await ts.update(Mock(), 1), "storage")
+            self.assertEqual(ts.notice, "Live TV relay unavailable")
+
+    async def test_repeated_runtime_failure_exhausts_automatic_retries(self):
+        ts = Timeshift()
+        buffer = Mock(config=CONFIG, error="Input lost", raw_error="",
+                      capture_failure={}, start=AsyncMock(return_value=True), close=AsyncMock())
+        with patch("satip_controller.timeshift.storage", return_value=CONFIG), \
+                patch("satip_controller.rolling.RollingBuffer", return_value=buffer) as rolling, \
+                patch("satip_controller.timeshift.time.monotonic", return_value=100) as clock:
+            for delay in (30, 60, 120, None):
+                await ts.prepare("live", "header", Path("/unused"), AsyncMock())
+                self.assertIs(ts.buffer, buffer)
+                self.assertEqual(await ts.update(Mock(), 1), "storage")
+                self.assertEqual(ts.retry_after, clock.return_value + delay if delay else None)
+                await ts.close()
+                if delay:
+                    clock.return_value = ts.retry_after + 1
+                    self.assertEqual(await ts.update(Mock(), 1), "ready")
+            calls = rolling.call_count
+            self.assertEqual(await ts.prepare("live", "header", Path("/unused"), AsyncMock()), "live")
+            self.assertEqual(rolling.call_count, calls)
+            self.assertIsNone(await ts.update(Mock(), 1))
+            self.assertIn("Preparing", await ts.action(Mock(), "pause"))
+            await ts.prepare("live", "header", Path("/unused"), AsyncMock())
+            self.assertIs(ts.buffer, buffer)
+
+    async def test_backoff_resets_only_after_sustained_fresh_capture(self):
+        ts = Timeshift()
+        ts.retry_delay = 120
+        ts.failed_uuid = CONFIG["uuid"]
+        ts.retry_after = 90
+        buffer = Mock(config=CONFIG, error="", raw_error="", capture_failure={},
+                      capture_health={"upstream_age": 0, "capture_write_age": 0},
+                      start=AsyncMock(return_value=True), close=AsyncMock())
+        ts.sample = AsyncMock()
+        with patch("satip_controller.timeshift.storage", return_value=CONFIG), \
+                patch("satip_controller.rolling.RollingBuffer", return_value=buffer), \
+                patch("satip_controller.timeshift.time.monotonic", return_value=100) as clock:
+            await ts.prepare("live", "header", Path("/unused"), AsyncMock())
+            self.assertEqual(ts.retry_delay, 120)
+            clock.return_value = 219
+            buffer.capture_health_at = clock.return_value
+            await ts.update(Mock(), 1)
+            self.assertEqual(ts.retry_delay, 120)
+            buffer.capture_health["upstream_age"] = 6
+            await ts.update(Mock(), 1)
+            self.assertIsNone(ts.healthy_since)
+            buffer.capture_health["upstream_age"] = 0
+            clock.return_value = 220
+            buffer.capture_health_at = clock.return_value
+            await ts.update(Mock(), 1)
+            clock.return_value = 340
+            buffer.capture_health_at = clock.return_value
+            await ts.update(Mock(), 1)
+            self.assertEqual(ts.retry_delay, 30)
+            self.assertIsNone(ts.failed_uuid)
+
+    async def test_stale_health_snapshot_does_not_reset_backoff(self):
+        ts = Timeshift()
+        ts.retry_delay = 120
+        ts.failed_uuid = CONFIG["uuid"]
+        ts.healthy_since = 100
+        ts.sample = AsyncMock()
+        ts.buffer = Mock(error="", raw_error="", capture_failure={}, live_reader=True,
+                         capture_health={"upstream_age": 0, "capture_write_age": 0},
+                         capture_health_at=100)
+        with patch("satip_controller.timeshift.storage", return_value=CONFIG), \
+                patch("satip_controller.timeshift.time.monotonic", return_value=220):
+            await ts.update(Mock(), 1)
+        self.assertEqual(ts.retry_delay, 120)
+        self.assertEqual(ts.failed_uuid, CONFIG["uuid"])
+        self.assertIsNone(ts.healthy_since)
+
+    def test_unchanged_index_does_not_refresh_health_observation(self):
+        from satip_controller.state import atomic_json
+        with tempfile.TemporaryDirectory() as temp:
+            buffer = RollingBuffer()
+            buffer.index = Path(temp) / "index.json"
+            atomic_json(buffer.index, {"health": {"upstream_age": 0, "capture_write_age": 0}})
+            with patch("satip_controller.rolling.time.monotonic", return_value=100) as clock:
+                buffer.refresh()
+                self.assertEqual(buffer.capture_health_at, 100)
+                clock.return_value = 220
+                buffer.refresh()
+                self.assertEqual(buffer.capture_health_at, 100)
+
+    async def test_new_channel_allows_retry_after_exhaustion(self):
+        ts = Timeshift()
+        ts.upstream = "old"
+        ts.retry_delay = 180
+        ts.failed_uuid = CONFIG["uuid"]
+        buffer = Mock(config=CONFIG, start=AsyncMock(return_value=True), close=AsyncMock())
+        with patch("satip_controller.timeshift.storage", return_value=CONFIG), \
+                patch("satip_controller.rolling.RollingBuffer", return_value=buffer):
+            await ts.prepare("new", "header", Path("/unused"), AsyncMock())
+            self.assertIs(ts.buffer, buffer)
+            self.assertEqual(ts.retry_delay, 30)
+
+    async def test_different_storage_gets_a_fresh_retry_budget(self):
+        ts = Timeshift()
+        ts.retry_delay = 180
+        ts.failed_uuid = "old-storage"
+        buffer = Mock(config=CONFIG, start=AsyncMock(return_value=True), close=AsyncMock())
+        with patch("satip_controller.timeshift.storage", return_value=CONFIG), \
+                patch("satip_controller.rolling.RollingBuffer", return_value=buffer):
+            await ts.prepare("live", "header", Path("/unused"), AsyncMock())
+            self.assertIs(ts.buffer, buffer)
+            self.assertEqual(ts.retry_delay, 30)
+
     async def test_failed_capture_has_bounded_backoff_then_stays_live(self):
         timeshift = Timeshift()
         with patch("satip_controller.timeshift.storage", return_value=CONFIG), patch("satip_controller.rolling.RollingBuffer") as rolling, patch("satip_controller.timeshift.time.monotonic", return_value=100) as clock:

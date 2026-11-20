@@ -42,6 +42,16 @@ NAME = re.compile(r"segment-[0-9]{9}\.ts")
 SESSION = re.compile(r"rolling-[0-9a-f]{32}")
 
 
+def capture_notice(reason):
+    if reason in ("upstream_eof", "upstream_timeout", "upstream_error", "upstream_stalled"):
+        return "TV input interrupted – returning to live TV"
+    if reason == "capture_blocked":
+        return "Time-shift capture input blocked – returning to live TV"
+    if reason in ("muxer_exit", "segment_stalled"):
+        return "Time-shift capture stopped – returning to live TV"
+    return "Time-shift prebuffer unavailable – returning to live TV"
+
+
 def cleanup(directory):
     """Remove only our flat, owned session files; never follow links."""
     if (not SESSION.fullmatch(directory.name) or directory.is_symlink()
@@ -214,6 +224,7 @@ def capture(directory, index, parent_fd, raw_fd, upstream, header, released_fd=N
     upstream_at = time.monotonic()
     os.set_blocking(raw_fd, False)
     upstream_socket = []
+    input_failure = {}
     def pump():
         nonlocal upstream_bytes, upstream_at
         pending = bytearray()
@@ -227,6 +238,8 @@ def capture(directory, index, parent_fd, raw_fd, upstream, header, released_fd=N
                     # for a full block and delays sparse initial channel data.
                     data = source.read1(188 * 256)
                     if not data:
+                        if running:
+                            input_failure["reason"] = "upstream_eof"
                         break
                     upstream_bytes += len(data)
                     upstream_at = time.monotonic()
@@ -250,8 +263,13 @@ def capture(directory, index, parent_fd, raw_fd, upstream, header, released_fd=N
                     # Overflow fails capture explicitly; it never drops bytes
                     # and silently publishes corrupt time-shift content.
                     feed.offer(data)
-        except (OSError, ValueError):
-            pass
+        except (OSError, ValueError) as exc:
+            if running:
+                # urlopen wraps connection timeouts in URLError; read1 may
+                # raise TimeoutError directly. Inspect types, never messages.
+                cause = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+                input_failure.update(reason="upstream_timeout" if isinstance(cause, TimeoutError) else "upstream_error",
+                    exception=type(exc).__name__, errno=cause.errno if isinstance(cause, OSError) else None)
         finally:
             if raw_open:
                 os.close(raw_fd)
@@ -264,11 +282,21 @@ def capture(directory, index, parent_fd, raw_fd, upstream, header, released_fd=N
     error = ""
     published = None
     health_published = 0
+    reason = ""
+    stage = "ram_storage"
+    failure = {}
+    def health():
+        now = time.monotonic()
+        return {"upstream_bytes": upstream_bytes, "upstream_age": round(now - upstream_at, 3),
+                "capture_write_age": round(now - feed.last_write, 3),
+                "capture_queue_chunks": feed.pending.qsize()}
     try:
         while running:
             if select.select([parent_fd], [], [], .25)[0] and not os.read(parent_fd, 1):
                 break
+            stage = "ram_storage"
             ram_storage(directory)
+            stage = "segment_index"
             rows = []
             try:
                 with (directory / "segments.csv").open() as source:
@@ -295,6 +323,7 @@ def capture(directory, index, parent_fd, raw_fd, upstream, header, released_fd=N
                 known.add(name)
                 last_end = end
                 last_segment = time.monotonic()
+            stage = "ram_retention"
             keep = retained_ram(items)
             names = {s["name"] for s in keep}
             for item in items:
@@ -304,22 +333,39 @@ def capture(directory, index, parent_fd, raw_fd, upstream, header, released_fd=N
             # Unlinked files held by a slow client are accounted by statvfs;
             # the HTTP side closes each descriptor before waiting on a socket.
             now = time.monotonic()
+            stage = "capture_health"
+            if input_failure:
+                reason = input_failure["reason"]
+                raise OSError("Upstream interrupted")
             if feed.failed.is_set():
-                error = "Time-shift capture input blocked – returning to live TV"
+                reason = "capture_blocked"
                 raise OSError("Capture input blocked")
-            if process.poll() is not None or now - last_segment > 15:
+            if process.poll() is not None:
+                reason = "muxer_exit"
+                raise OSError("Muxer exited")
+            if now - last_segment > 15:
+                reason = "upstream_stalled" if now - upstream_at > 10 else "segment_stalled"
                 raise OSError("Capture stopped")
             signature = tuple(s["name"] for s in items)
             if signature != published or now - health_published >= 1:
+                stage = "publish"
                 atomic_json(index, {"segments": items, "config": config, "error": "",
-                    "health": {"upstream_bytes": upstream_bytes,
-                               "upstream_age": round(now - upstream_at, 3),
-                               "capture_write_age": round(now - feed.last_write, 3),
-                               "capture_queue_chunks": feed.pending.qsize()}}, 0o600, durable=False)
+                    "health": health()}, 0o600, durable=False)
                 published = signature
                 health_published = now
-    except (OSError, ValueError):
-        error = error or "Time-shift prebuffer unavailable – returning to live TV"
+    except (OSError, ValueError) as exc:
+        error = capture_notice(reason)
+        failure = {"reason": reason or stage, "stage": stage,
+                   "exception": input_failure.get("exception", type(exc).__name__),
+                   "errno": input_failure.get("errno", exc.errno if isinstance(exc, OSError) else None),
+                   "muxer_returncode": process.poll(), "segments": len(items),
+                   "segment_age": round(time.monotonic() - last_segment, 3),
+                   "health": health()}
+        # Never retain exception text, stream URLs, credentials or FFmpeg stderr.
+        atomic_json(index.parent / "last-capture-failure.json", failure, 0o600, durable=False)
+        # Publish the cause before potentially slow FFmpeg/socket teardown.
+        atomic_json(index, {"segments": items, "config": config, "error": error,
+                            "health": failure["health"], "failure": failure}, 0o600, durable=False)
     finally:
         running = False
         feed.closed.set()
@@ -340,7 +386,8 @@ def capture(directory, index, parent_fd, raw_fd, upstream, header, released_fd=N
             except subprocess.TimeoutExpired:
                 process.kill()
         process.wait()
-        atomic_json(index, {"segments": items, "config": config, "error": error}, 0o600, durable=False)
+        atomic_json(index, {"segments": items, "config": config, "error": error,
+                            "health": failure.get("health", health()), "failure": failure}, 0o600, durable=False)
         os.close(parent_fd)
 
 
@@ -522,6 +569,8 @@ class RollingBuffer:
         self.token = secrets.token_hex(16)
         self.index_stamp = None
         self.capture_health = {}
+        self.capture_health_at = None
+        self.capture_failure = {}
         self.raw_at = None
         self.raw_received = 0
         self.ram_segments = []
@@ -559,6 +608,8 @@ class RollingBuffer:
                 self.ram_segments = data.get("segments", [])
                 self.error = data.get("error", "")
                 self.capture_health = data.get("health", {})
+                self.capture_health_at = time.monotonic()
+                self.capture_failure = data.get("failure", {})
         except FileNotFoundError:
             self.ram_segments = []
         if self.process and self.process.returncode is not None:

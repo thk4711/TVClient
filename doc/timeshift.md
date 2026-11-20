@@ -51,8 +51,11 @@ about 1 GiB free space. No particular number of minutes is guaranteed.
 
 History is temporary, not a recording. It is discarded on Return to live,
 channel change, search, browser/YouTube viewing, player restart or reboot.
-USB or capture failure returns to live with a notice; check storage rather than
-formatting it to clear an error.
+USB or capture failure returns to live with a notice. **TV input interrupted**
+means the incoming television stream was interrupted; check the TV source and
+network, not just USB storage. **Time-shift capture stopped** indicates a capture
+problem. Neither notice is a reason to format the drive. Repeated capture failures
+limit automatic retries so direct live TV can continue; Pause requests another attempt.
 
 ## Mounting persistence and removal
 

@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remove the legacy boot-file initialization override and HDMI splash overrides.
 
 ### Fixed
+- Preserve specific time-shift capture failure causes and terminal health counters,
+  distinguishing interrupted TV input from USB problems. Bound automatic retries
+  across repeated runtime failures instead of resetting backoff at process startup.
 - Favourites drag no longer cancels when pointer capture is briefly lost before
   the first move, which could drop reordering on slower or touch devices.
 

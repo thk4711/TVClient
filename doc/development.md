@@ -131,8 +131,12 @@ bytes from the pump, approximately 3 MiB) feeds the muxer on a daemon thread.
 Overflow fails capture rather than dropping bytes; teardown terminates FFmpeg,
 which releases a blocked pipe writer. Capture/relay failure marks a retry
 cooldown so the recovery load uses direct live playback before attempting the
-prebuffer again (30 seconds initially). The existing bounded playback recovery
-remains enabled. RAM-only health snapshots and stall diagnostics distinguish
+prebuffer again (30/60/120-second backoff, then no further automatic retries).
+Runtime failures retain that backoff until capture has remained fresh for
+120 seconds; merely starting a process does not reset it. A terminal RAM index
+and `/run/satip-player/last-capture-failure.json` retain sanitized cause and health
+counters, so an input outage is not reported as a USB-capacity problem.
+The existing bounded playback recovery remains enabled. RAM-only health snapshots and stall diagnostics distinguish
 upstream receipt, capture writes and live-reader overflow without stream URLs or
 credentials. Tests in tests/test_rolling.py cover queue overflow, ordered feeding,
 pipe failure and diagnostic sanitization.

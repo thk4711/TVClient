@@ -506,7 +506,7 @@ Start with the checks below. Do not format drives, reflash the SD card or change
 | Browser video will not start | Press Play if autoplay was blocked. Stop the old stream, allow cleanup, then start again. Try another supported saved channel. |
 | Browser video stopped when someone used the remote | Expected: local receiver controls take priority. Start a new browser stream if desired. |
 | Pause says unavailable | Configure suitable USB storage in Settings and check free space. Pause does not work as a permanent recording feature. |
-| Time shift suddenly returns to live | Check the USB storage connection/free space in Settings. Do not format the disk to clear an error. Use the time-shift failure checks in the detailed Troubleshooting guide if it recurs. |
+| Time shift suddenly returns to live | If the notice says TV input interrupted, check the TV source and network. Otherwise also check USB storage connection/free space in Settings. Do not format the disk to clear an error. Repeated capture failures limit automatic retries; Pause requests another attempt. Use the time-shift failure checks in the detailed Troubleshooting guide if it recurs. |
 | Backup restore is refused | Use the correct trusted backup type, under 32 MiB, from a compatible installation. Cancel and review the backup compatibility requirements before retrying. |
 | Old address or password fails after restore | Use the restored network/password settings; look for the receiver in your router's connected-device list. |
 

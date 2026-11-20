@@ -39,9 +39,34 @@ upstream byte/age counters rather than assuming the USB drive is responsible.
 
 ## Time shift unexpectedly returns to live
 
-Inspect `tail -n 80 /run/satip-supervisor/player.log` and, when present,
-`cat /run/satip-player/last-usb-failure.json` over SSH before rebooting. The
-single failure record survives ordinary session cleanup, but not reboot.
+Before rebooting, read these files over SSH (an absent failure record means
+none was retained in the current boot):
+
+~~~sh
+tail -n 80 /run/satip-supervisor/player.log
+tail -n 80 /run/satip-supervisor/tvheadend.log
+cat /run/satip-player/last-capture-failure.json
+cat /run/satip-player/last-usb-failure.json
+~~~
+
+The two bounded failure records survive ordinary session cleanup, but not reboot.
+The capture record's `reason` distinguishes `upstream_eof`, `upstream_timeout`,
+`upstream_error` and `upstream_stalled` from `capture_blocked`, `muxer_exit`,
+`segment_stalled` and RAM/index operations. Terminal health counters are preserved.
+**TV input interrupted** is an input failure, not a USB-capacity diagnosis. Correlate
+its time with Tvheadend `no data received`, RTSP errors and tuning failures.
+These establish reception trouble, but do not by themselves distinguish the
+tuner, satellite signal, network or client. **Time-shift capture stopped** indicates
+a muxer/segment failure; the exit code is recorded without retaining raw stderr.
+Do not lengthen deadlines or suppress recovery to hide these symptoms.
+
+Automatic capture retries use 30/60/120-second backoff, including failures after
+a replacement process starts. After exhaustion, direct live TV continues without
+further automatic prebuffer reloads. Fresh input/capture writes for 120 seconds
+reset the retry budget; Pause, channel changes and storage reconnection permit
+a new attempt. A retry never starts USB writes automatically.
+
+In the USB record,
 `ram_index`/`ram_segment` failures indicate stalled capture or missing RAM
 content; `usb_write`/`usb_publish` indicate copy/publication failure, and
 `storage` indicates failed storage readiness/identity checks. Check free space,

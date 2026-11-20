@@ -4,6 +4,8 @@ English messages are the keys; language is explicit and never process-global.
 """
 
 GERMAN = {
+    "TV input interrupted – returning to live TV": "TV-Eingang unterbrochen – zurück zu Live-TV",
+    "Time-shift capture stopped – returning to live TV": "Zeitspeicher-Aufnahme gestoppt – zurück zu Live-TV",
     "USB time shift could not start – live TV continues": "USB-Zeitspeicher konnte nicht starten – Live-TV läuft weiter",
     "Time-shift prebuffer unavailable – returning to live TV": "Zeitspeicher nicht verfügbar – zurück zu Live-TV",
     "Time-shift capture input blocked – returning to live TV": "Zeitspeicher-Eingang blockiert – zurück zu Live-TV",

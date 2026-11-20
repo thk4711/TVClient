@@ -84,6 +84,16 @@ class Timeshift:
         self.retry_after = None
         self.retry_delay = 30
         self.resume_position = None
+        self.healthy_since = None
+        self.upstream = None
+        self.raw_failure_since = None
+
+    def capture_failed(self, config):
+        self.healthy_since = None
+        if config:
+            self.failed_uuid = config["uuid"]
+            self.retry_after = time.monotonic() + self.retry_delay if self.retry_delay < 180 else None
+            self.retry_delay = min(180, self.retry_delay * 2)
 
     def options(self):
         # Disk retention is owned by the segment writer, never mpv's append-only
@@ -122,11 +132,20 @@ class Timeshift:
         await self.close()
         self.reload = reload
         config = storage()
+        if (self.upstream is not None and upstream != self.upstream
+                or config and self.failed_uuid is not None and self.failed_uuid != config["uuid"]):
+            self.failed_uuid = None
+            self.retry_after = None
+            self.retry_delay = 30
+        self.upstream = upstream
+        self.healthy_since = None
+        self.raw_failure_since = None
         self.ready_identity = (config["boot_id"], config["uuid"], config["device"]) if config else None
         if not config:
             return upstream
-        if (self.failed_uuid == config["uuid"] and self.retry_after is not None
-                and time.monotonic() < self.retry_after):
+        if (self.failed_uuid == config["uuid"] and (
+                self.retry_after is not None and time.monotonic() < self.retry_after
+                or self.retry_after is None and self.retry_delay == 180)):
             # Recover direct playback first; do not immediately reopen the
             # prebuffer path that just starved or lost its capture input.
             return upstream
@@ -146,14 +165,10 @@ class Timeshift:
                 await self.close()
                 return upstream
             self.config = self.buffer.config
-            self.failed_uuid = None
-            self.retry_after = None
-            self.retry_delay = 30
+            self.healthy_since = time.monotonic()
             return self.buffer.live()
         except (OSError, ValueError, ImportError):
-            self.failed_uuid = config["uuid"]
-            self.retry_after = time.monotonic() + self.retry_delay if self.retry_delay < 180 else None
-            self.retry_delay = min(180, self.retry_delay * 2)
+            self.capture_failed(config)
             self.notice = "Time-shift prebuffer unavailable – returning to live TV"
             await self.close()
             return upstream
@@ -181,12 +196,16 @@ class Timeshift:
             identity = (current["boot_id"], current["uuid"], current["device"]) if current else None
             if identity and (identity != self.ready_identity or (self.retry_after is not None
                     and time.monotonic() >= self.retry_after)):
+                if identity != self.ready_identity:
+                    self.failed_uuid = None
+                    self.retry_after = None
+                    self.retry_delay = 30
                 self.ready_identity = identity
-                self.retry_after = None
                 self.notice = "USB storage available – enabling time shift"
                 return "ready"
             if not identity:
                 self.ready_identity = None
+                self.failed_uuid = None
                 self.retry_after = None
                 self.retry_delay = 30
             return None
@@ -194,15 +213,45 @@ class Timeshift:
         try:
             self.buffer.refresh()
         except (OSError, ValueError):
+            self.capture_failed(current)
             self.notice = "Time-shift prebuffer unavailable – returning to live TV"
             return "storage"
+        if not self.active and self.buffer.raw_error and not self.buffer.error:
+            # The raw pipe can close before the independent capture supervisor
+            # publishes its cause. Give that record one bounded health tick,
+            # rather than reporting a generic relay error and discarding it.
+            now = time.monotonic()
+            if self.raw_failure_since is None:
+                self.raw_failure_since = now
+            if now - self.raw_failure_since < 1:
+                return None
+        else:
+            self.raw_failure_since = None
         if self.buffer.error or (not self.active and self.buffer.raw_error):
             self.notice = self.buffer.error or "Live TV relay unavailable"
-            if current:
-                self.failed_uuid = current["uuid"]
-                self.retry_after = time.monotonic() + self.retry_delay
-                self.retry_delay = min(180, self.retry_delay * 2)
+            self.capture_failed(current)
+            if self.buffer.capture_failure:
+                logging.getLogger(__name__).warning("Time-shift capture failed: %s", self.buffer.capture_failure)
             return "storage"
+        # Starting a process is not recovery: only sustained fresh input resets
+        # the automatic retry budget. Short-lived generations retain backoff.
+        health = self.buffer.capture_health
+        observed = self.buffer.capture_health_at
+        snapshot_age = time.monotonic() - observed if type(observed) in (int, float) else None
+        fresh = (snapshot_age is not None and 0 <= snapshot_age < 5
+                 and isinstance(health, dict)
+                 and all(type(health.get(key)) in (int, float)
+                         and 0 <= health[key] + snapshot_age < 5
+                         for key in ("upstream_age", "capture_write_age")))
+        if fresh:
+            if self.healthy_since is None:
+                self.healthy_since = time.monotonic()
+            if time.monotonic() - self.healthy_since >= 120:
+                self.failed_uuid = None
+                self.retry_after = None
+                self.retry_delay = 30
+        else:
+            self.healthy_since = None
         if self.active and (not current or self.buffer.disk_error
                 or current["uuid"] != self.config["uuid"] or current["device"] != self.config["device"]):
             self.failed_uuid = self.config["uuid"]
@@ -332,6 +381,7 @@ class Timeshift:
             return "Live"
         if not self.config and action != "live":
             if storage() and not self.buffer:
+                self.failed_uuid = None
                 self.retry_delay = 30
                 self.retry_after = time.monotonic()
                 return "Preparing time shift – press Pause again when TV resumes"
