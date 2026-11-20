@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Limit public boot-file preferences to hostname, timezone, SSH enablement,
+  root password and the three Wi-Fi fields. Reject obsolete boot options while
+  preserving legacy saved settings and configuration-backup compatibility.
+- Require the image's factory-empty marker for automatic data initialization;
+  remove the legacy boot-file initialization override and HDMI splash overrides.
+
 ### Fixed
 - Favourites drag no longer cancels when pointer capture is briefly lost before
   the first move, which could drop reordering on slower or touch devices.

@@ -197,7 +197,8 @@ class ChannelBackupTests(unittest.TestCase):
             return self.service.handle(action, args)
         install(app, self.store / "config/web/login.json", helper, backup_root=self.root / "run")
         client = TestClient(app)
-        auth = ("satip", "fake-web-password")
+        login = read_json(self.store / "config/web/login.json")
+        auth = (login["username"], login["password"])
         headers = {"X-Satip-Action": "1", "Content-Type": "application/octet-stream"}
         path = "/api/device/channels/upload/" + self.token
         content = self.archive.read_bytes()

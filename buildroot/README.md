@@ -210,11 +210,12 @@ ssh_enabled=yes
 root_password=your-root-password
 ~~~
 
-SSH is off by default without a key. Root credentials are separate from the web
+SSH is off by default on a new card. Root credentials are separate from the web
 interface. Setting a web password in Settings enables browser authentication
-(username satip). An optional setup_password can preconfigure that password for
-management after setup. Legacy empty data partitions may still use
-initialize_data=yes; it must not be used for a private imported store.
+(username satip). The boot file supports only hostname, timezone, ssh_enabled,
+root_password, wifi_country, wifi_ssid and wifi_psk. Obsolete options are rejected.
+Data initializes only with the image's factory-empty marker; unmarked or foreign
+data is never initialized automatically.
 
 Boot preferences are allowlisted literal key=value lines, with no shell expansion
 or inline comments. Wi-Fi SSID/password spaces are preserved; other values are

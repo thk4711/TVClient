@@ -1,40 +1,22 @@
-# Optional first-boot preferences and development recovery access.
+# Optional first-boot network preferences and development recovery access.
 # Normal setup needs NO card edits: connect HDMI and Ethernet, or use a USB
 # keyboard for Wi-Fi. Open the URL/QR code on HDMI. First setup needs no password.
-# The image initializes its factory-empty data automatically. Established and
-# imported data is never replaced. Only legacy EMPTY labelled data needs:
-# initialize_data=yes
-# New installations use login-free home-LAN management. An optional password
-# protects management after setup (username satip), or set one later in Settings:
-# setup_password=your-browser-password
-# lan_access=authenticated
-# Explicit login-free management, including device settings: lan_access=login-free
-# timezone=Europe/Berlin
-# drm_connector=HDMI-A-2
-# drm_mode=1920x1080@50
-# audio_device=alsa/hdmi:CARD=vc4hdmi1,DEV=0
-# USB keyboards and GPIO infrared are always enabled together.
-# Optional additional USB remote identity (also selectable in the browser):
-# keyboard_vendor=04d9
-# keyboard_product=0006
-# ir_profile=apple-a1294
-# Legacy ir_profile=disabled remains parseable; infrared now stays enabled.
-# Optional server description; otherwise automatic home-network discovery:
-# satip_xml=http://192.168.1.10/desc.xml
-# satellite=Astra-19.2E
-# satip_source=1
-# Optional tuner preference; the browser can select any available frontend:
-# tuner_number=2
+# The image initializes its factory-empty data automatically. Established,
+# imported and unmarked data is never replaced or initialized automatically.
+# HDMI picture/sound and standard USB keyboards are handled automatically.
+# USB keyboards and supported GPIO infrared work together. Select the TV
+# source/tuner and configure browser access through the browser interface.
+# Only these seven keys are supported; obsolete/unknown keys are rejected.
 # Never put real values in source/build inputs. Edit only the flashed card.
 # Literal key=value, no shell expansion, quoting or inline comments.
 hostname=satip-dev
+# timezone=Europe/Berlin
 # Optional SSH access, independent of browser access. Login username: root.
+# SSH defaults off on a new card; supplying a password does not enable it.
 # ssh_enabled=yes
-# The Pi hashes a supplied root password internally. Recovery settings can also
-# be changed through this file on later boots.
+# The Pi hashes a supplied root password internally. SSH and root-password
+# recovery settings can also be changed through this file on later boots.
 # root_password=your-root-password
-# Optional existing-key access:
-# ssh_authorized_key=ssh-ed25519 AAAA...
 # Optional WPA/WPA2 Personal Wi-Fi. Country, SSID and PSK go together.
 # UTF-8 SSIDs and printable ASCII passwords; spaces in both are preserved.
 # wifi_country=DE

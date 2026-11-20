@@ -36,7 +36,7 @@ class BackupTests(unittest.TestCase):
             (self.root / name).write_text(text)
         with patch("os.chown"):
             persistent.publish(self.root / "data")
-            provision.seed(self.root, self.root / "data", {"setup_password": "fake-web-password"})
+            provision.seed(self.root, self.root / "data", {})
         self.device = Device(self.root, run=lambda *a, **k: None)
         self.device.command = lambda *a, **k: None
         factory = read_json(self.store / "identity/factory.json")
@@ -295,7 +295,8 @@ class BackupTests(unittest.TestCase):
         token = "e" * 32
         path = "/api/device/backup/upload/" + token
         content = self.archive.read_bytes()
-        auth = ("satip", "fake-web-password")
+        login = read_json(self.store / "config/web/login.json")
+        auth = (login["username"], login["password"])
         headers = {"X-Satip-Action": "1", "Content-Type": "application/octet-stream"}
         self.assertEqual(client.post(path, content=content, headers=headers).status_code, 401)
         self.assertEqual(client.post(path, content=content, auth=auth).status_code, 403)

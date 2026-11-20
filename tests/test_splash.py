@@ -113,11 +113,11 @@ class StartupTests(unittest.TestCase):
             splash.monitor(self.root, directory)
         self.assertEqual(command.call_args_list[-1].args, ("STATE 12 file:0", directory))
 
-    def test_display_preferences_exclude_secrets_and_use_actual_configuration(self):
+    def test_display_ignores_boot_overrides_and_uses_actual_configuration(self):
         (self.root / "boot").mkdir()
         (self.root / "boot/satip-config.txt").write_text(
             "wifi_psk=privat\ndrm_connector=HDMI-A-1\ndrm_mode=1280x720@50\n")
-        self.assertEqual(splash.display_settings(self.root), "DISPLAY HDMI-A-1 1280x720@50")
+        self.assertEqual(splash.display_settings(self.root), "DISPLAY HDMI-A-2 1920x1080@50")
         directory = self.root / "data/store/config/player"
         directory.mkdir(parents=True)
         atomic_json(directory / "config.json", {"drm_connector": "HDMI-A-2", "drm_mode": "1920x1080@60"})

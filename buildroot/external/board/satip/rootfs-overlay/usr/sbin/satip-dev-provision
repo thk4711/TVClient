@@ -11,6 +11,9 @@ import sys
 import tempfile
 
 
+# Public card inputs are deliberately smaller than the saved-settings schema.
+BOOT_KEYS = {"hostname", "timezone", "ssh_enabled", "root_password",
+             "wifi_country", "wifi_ssid", "wifi_psk"}
 KEYS = {"hostname", "ssh_authorized_key", "recovery_password_hash", "ssh_enabled", "root_password",
         "wifi_country", "wifi_ssid", "wifi_psk", "initialize_data", "timezone",
         "setup_password", "lan_access", "drm_connector", "drm_mode", "audio_device",
@@ -25,7 +28,7 @@ class ConfigError(ValueError):
         super().__init__(self.code)
 
 
-def parse_config(text):
+def parse_config(text, *, allowed_keys=KEYS):
     if len(text.encode("utf-8")) > 16384:
         raise ConfigError("size")
     values = {}
@@ -41,7 +44,7 @@ def parse_config(text):
             value = value.strip()
         if not separator:
             raise ConfigError("format", number)
-        if key not in KEYS:
+        if key not in allowed_keys:
             raise ConfigError("unknown", number)
         if key in values:
             raise ConfigError("duplicate", number)
@@ -117,13 +120,19 @@ def parse_config(text):
     return values
 
 
+def parse_boot_config(text):
+    """Validate public boot inputs without accepting legacy saved preferences."""
+    return parse_config(text, allowed_keys=BOOT_KEYS)
+
+
 def read_config(path):
+    """Read the public boot file; saved settings use parse_config directly."""
     try:
         if path.is_symlink():
             raise ConfigError("file")
         if path.exists() and path.stat().st_size > 16384:
             raise ConfigError("size")
-        return parse_config(path.read_text(encoding="utf-8")) if path.exists() else {}
+        return parse_boot_config(path.read_text(encoding="utf-8")) if path.exists() else {}
     except (OSError, UnicodeError):
         raise ConfigError("file") from None
 

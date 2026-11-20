@@ -56,12 +56,12 @@ class ProvisionTests(FreshFixture):
         self.assertEqual(error.read_text(), "data-mount\n")
         (self.root / "boot").mkdir()
         config = self.root / "boot/satip-config.txt"
-        config.write_text("setup_password=x\nsetup_password=private")
+        config.write_text("root_password=x\nroot_password=private")
         with patch.object(persistent, "validate_mount"):
             with self.assertRaises(ValueError):
                 provision.boot(self.root, self.data)
             self.assertEqual(error.read_text(), "config-duplicate:2\n")
-            config.write_text("setup_password=x")
+            config.write_text("root_password=x")
             with patch.object(persistent, "prepare", side_effect=ValueError("private schema")):
                 with self.assertRaises(ValueError):
                     provision.boot(self.root, self.data)
@@ -71,7 +71,7 @@ class ProvisionTests(FreshFixture):
                     provision.boot(self.root, self.data)
             self.assertEqual(error.read_text(), "backend-init\n")
 
-    def test_extended_allowlist_and_no_shell(self):
+    def test_saved_legacy_allowlist_and_no_shell(self):
         self.assertEqual(parser.parse_config("satip_xml=http://192.168.1.10:38400/description.xml")["satip_xml"],
                          "http://192.168.1.10:38400/description.xml")
         values = parser.parse_config("initialize_data=yes\ntimezone=Europe/Berlin\nkeyboard_vendor=1234\n"
@@ -97,6 +97,24 @@ class ProvisionTests(FreshFixture):
         self.assertFalse((self.store / "management/library.json").exists())
         self.assertEqual(read_json(self.store / "installation.json"), {"state": "unconfigured"})
         Config.load(self.store / "config/player/config.json")
+
+    def test_new_seed_imports_only_timezone_not_legacy_boot_preferences(self):
+        other = self.root / "fresh-data"
+        other.mkdir()
+        persistent.publish(other)
+        zone = self.root / "usr/share/zoneinfo/Europe/Berlin"
+        zone.parent.mkdir(parents=True)
+        zone.write_bytes(b"Berlin fixture")
+        provision.seed(self.root, other, {
+            "timezone": "Europe/Berlin", "setup_password": "obsolete-secret",
+            "lan_access": "authenticated", "drm_connector": "HDMI-A-1",
+            "drm_mode": "1280x720@50", "audio_device": "alsa/hdmi:CARD=vc4hdmi0,DEV=0",
+            "keyboard_vendor": "1234", "keyboard_product": "5678", "ir_profile": "disabled",
+            "satip_xml": "http://192.168.1.10/desc.xml", "satip_source": "2", "tuner_number": "2"})
+        factory = read_json(other / "store/identity/factory.json")
+        self.assertEqual(factory["settings"], {**provision.DEFAULTS, "timezone": "Europe/Berlin"})
+        self.assertNotEqual(factory["login"]["password"], "obsolete-secret")
+        self.assertEqual((self.root / "etc/localtime").read_bytes(), b"Berlin fixture")
 
     def test_bootstrap_has_current_schema_exact_acl_flags_and_password_encoding(self):
         ids = self.factory["ids"]
@@ -186,17 +204,30 @@ class ProvisionTests(FreshFixture):
             provision.activate(self.data)
         self.assertEqual(read_json(self.store / "installation.json"), {"state": "unconfigured"})
 
-    def test_fresh_boot_refuses_foreign_data_and_requires_opt_in(self):
+    def test_fresh_boot_refuses_unmarked_and_foreign_data(self):
         other = self.root / "other-data"
         other.mkdir()
         with patch.object(persistent, "validate_mount"), self.assertRaises(ValueError):
             provision.boot(self.root, other)
         (self.root / "boot").mkdir()
-        (self.root / "boot/satip-config.txt").write_text("initialize_data=yes")
+        (self.root / "boot/satip-config.txt").write_text("hostname=test-pi")
+        (other / ".satip-factory-empty").write_bytes(b"satip-fresh-data-v1\n")
         (other / "foreign").write_text("preserve")
         with patch.object(persistent, "validate_mount"), self.assertRaises(ValueError):
             provision.boot(self.root, other)
         self.assertFalse((other / "store").exists())
+        self.assertEqual((other / "foreign").read_text(), "preserve")
+
+    def test_factory_marked_empty_data_initializes_without_opt_in(self):
+        other = self.root / "other-data"
+        other.mkdir()
+        (other / ".satip-factory-empty").write_bytes(b"satip-fresh-data-v1\n")
+        with patch.object(persistent, "validate_mount"), patch.object(persistent, "prepare"), \
+                patch.object(provision, "seed") as seed:
+            provision.boot(self.root, other)
+        self.assertEqual(read_json(other / "store/installation.json"), {"state": "unconfigured"})
+        self.assertFalse((other / ".satip-factory-empty").exists())
+        seed.assert_called_once_with(self.root, other, {})
 
 
 def serialized(uuid, classname, **fields):

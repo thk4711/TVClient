@@ -88,7 +88,7 @@ early screen. State changes and the 100% frame are logged with Linux uptime.
 | Fresh installation ready for setup | Open the displayed browser address |
 | Invalid boot configuration | Correct the indicated line in satip-config.txt and reboot |
 | Data partition unavailable | Check the partition, free space and write access |
-| Initialization not authorized | Use initialize_data=yes only for fresh, empty data |
+| Initialization not authorized | Factory-empty image marker is required; preserve existing data and check the image/data partition |
 | Saved-data preparation failure | Check the error code and preparation logs |
 | SSH/console setup failure | Check recovery provisioning and its logs |
 | Imported, unqualified data | Follow the import qualification procedure |

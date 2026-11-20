@@ -7,7 +7,7 @@ disable_overscan=1
 disable_splash=1
 boot_delay=0
 # Avoid firmware's default HDMI-A-1/60 Hz modeset before the KMS splash.
-# KMS selects the configured connector/mode from satip-config.txt and data.
+# KMS follows connected HDMI using internal defaults and saved player settings.
 disable_fw_kms_setup=1
 avoid_warnings=2
 enable_uart=1

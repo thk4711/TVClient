@@ -223,14 +223,9 @@ def display_settings(root):
     if (root / "run/satip-data-ready").exists() and path.is_file():
         values = read_json(path)
     else:
-        # FAT enthält gegebenenfalls private Felder: nur diese zwei Werte auswerten.
-        path = root / "boot/satip-config.txt"
+        # Before persistent settings are ready, use the automatic HDMI defaults.
+        # Boot-file display overrides are no longer supported.
         values = {}
-        if path.is_file() and path.stat().st_size <= 16384:
-            for line in path.read_text().splitlines():
-                key, separator, value = line.partition("=")
-                if separator and key.strip() in ("drm_connector", "drm_mode"):
-                    values[key.strip()] = value.strip()
     connector = values.get("drm_connector", "HDMI-A-2")
     mode = values.get("drm_mode", "1920x1080@50")
     if connector not in ("HDMI-A-1", "HDMI-A-2") or mode not in ("1920x1080@50", "1920x1080@60", "1280x720@50"):

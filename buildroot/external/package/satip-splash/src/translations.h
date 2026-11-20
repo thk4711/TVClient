@@ -47,7 +47,7 @@ static const struct { const char *en, *de; } translations[] = {
     {"Diagnostics: /run/satip-supervisor/player.log · retrying …", "Diagnose: /run/satip-supervisor/player.log · neuer Versuch …"},
     {"Check the file on the boot partition using a computer", "Datei auf der Boot-Partition am Computer prüfen"},
     {"SD card: check satip-data partition, free space and write access", "SD-Karte: Partition satip-data, freien Platz und Schreibzugriff prüfen"},
-    {"For a new, empty data partition: set initialize_data=yes", "Für eine neue, leere Datenpartition: initialize_data=yes setzen"},
+    {"Factory-empty image marker required; preserve existing data", "Werksleer-Markierung des Images erforderlich; vorhandene Daten erhalten"},
     {"Error code: /run/satip-boot-error · Preserve existing data", "Fehlercode: /run/satip-boot-error · Vorhandene Daten erhalten"},
     {"Check root_password / ssh_enabled · Read boot log over UART", "root_password / ssh_enabled prüfen · Bootprotokoll über UART lesen"},
     {"Diagnostics: /run/satip-supervisor/web.log", "Diagnose: /run/satip-supervisor/web.log"},

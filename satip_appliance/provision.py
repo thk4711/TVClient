@@ -73,17 +73,16 @@ def seed(root, data, values):
     if not identity.exists():
         if any((store / "tvheadend").iterdir()):
             raise ValueError("Fresh setup requires an empty backend")
-        settings = {**DEFAULTS, **{key: value for key, value in values.items()
-                    if key in DEFAULTS or key in ("satip_xml", "tuner_number")}}
-        if values.get("setup_password") and "lan_access" not in values:
-            settings["lan_access"] = "authenticated"
+        # Only timezone is a public factory preference. Source selection and
+        # access preferences belong to the browser; output/input use defaults.
+        settings = {**DEFAULTS, **{key: value for key, value in values.items() if key == "timezone"}}
         timezone = root / "usr/share/zoneinfo" / settings["timezone"]
         if not timezone.is_file() or not timezone.resolve().is_relative_to((root / "usr/share/zoneinfo").resolve()):
             raise ValueError("Timezone is not installed")
         factory = {"settings": settings,
                    "admin": {"username": "satip-admin", "password": secrets.token_urlsafe(32)},
                    "playback": {"username": "satip-playback", "password": secrets.token_urlsafe(32)},
-                   "login": {"username": "satip", "password": values.get("setup_password", secrets.token_urlsafe(32))},
+                   "login": {"username": "satip", "password": secrets.token_urlsafe(32)},
                    "ids": {role: secrets.token_hex(16) for role in ("admin_acl", "playback_acl", "admin_password", "playback_password", "pass")}}
         owned_json(identity, factory, 0, 0)
     factory = read_json(identity)
@@ -178,10 +177,10 @@ def boot(root=Path("/"), data=Path("/data")):
             marker = data / ".satip-factory-empty"
             fresh = (not marker.is_symlink() and marker.is_file()
                      and marker.read_bytes() == b"satip-fresh-data-v1\n")
-            if not fresh and values.get("initialize_data") != "yes":
-                raise ValueError("Explicit fresh initialization of empty data required")
+            if not fresh:
+                raise ValueError("Factory-empty data marker required")
             step("data-prepare")
-            allowed = {"lost+found", ".satip-factory-empty", ".fresh-stage"} if fresh else {"lost+found"}
+            allowed = {"lost+found", ".satip-factory-empty", ".fresh-stage"}
             if any(p.name not in allowed for p in data.iterdir()):
                 raise ValueError("Existing data prevents fresh initialization")
             persistent.publish(data, fresh=fresh)

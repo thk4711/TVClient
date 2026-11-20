@@ -42,6 +42,17 @@ Wait for scan/import and any recovery to finish before saving. Check HDMI pictur
 sound, channel and volume controls after TV starts. Reboot if you changed the
 hostname, then check that favourites and settings remain saved.
 
+## Optional card preferences
+
+No card edits are needed for normal setup. If you prefer to preconfigure the
+flashed card's `satip-config.txt`, only `hostname`, `timezone`, `ssh_enabled`,
+`root_password`, `wifi_country`, `wifi_ssid` and `wifi_psk` are accepted. Supply
+all three Wi-Fi fields together. Remove older options rather than leaving them
+active: obsolete/unknown keys stop provisioning with a line-numbered error.
+HDMI and standard keyboards are handled automatically; choose the TV source
+and tuner in browser setup, and set a browser password later in Settings.
+See [boot preferences](provisioning.md#allowlisted-preferences).
+
 ## After setup
 
 Use [Usage](usage.md) for reference, [Device settings](device-settings.md) for

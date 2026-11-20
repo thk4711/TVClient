@@ -279,8 +279,9 @@ If you already have root access, skip to the command below. Otherwise:
    **satip-config.txt** as plain text. Preserve other entries; replace existing
    entries rather than adding duplicate keys. Set **ssh_enabled=yes** and
    **root_password=YOUR_NEW_ROOT_PASSWORD** with your chosen temporary root
-   password. Remove a conflicting **recovery_password_hash** entry when using
-   root_password; only one root-password form may be specified. These recovery fields work after first setup as well.
+   password. Remove obsolete entries such as **recovery_password_hash** or
+   **ssh_authorized_key**; only the seven documented boot parameters are accepted.
+   These recovery fields work after first setup as well.
 3. Eject the card, put it back in the Pi and boot. Find its numeric address in
    your router if needed, then connect from your computer with
    **ssh root@RECEIVER_IP**. Check the host fingerprint rather than disabling

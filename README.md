@@ -89,6 +89,11 @@ You need:
 5. Choose your favourites and start watching. See [Usage](doc/usage.md) for
    controls, programme information, and browser viewing.
 
+Optional card preferences support only `hostname`, `timezone`, `ssh_enabled`,
+`root_password`, `wifi_country`, `wifi_ssid` and `wifi_psk`. Older boot-file
+options are rejected; configure the TV source and browser access in the GUI.
+See [boot preferences](doc/provisioning.md#allowlisted-preferences).
+
 ## Supported TV and viewing modes
 
 The receiver supports free-to-air HD and SD channels using H.264 or MPEG-2, with

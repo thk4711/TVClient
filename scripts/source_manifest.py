@@ -197,7 +197,7 @@ def build_inputs(root):
         board = root / "buildroot/external/board/satip"
         provision = runpy.run_path(str(board / "rootfs-overlay/usr/sbin/satip-dev-provision"))
         try:
-            settings = provision["parse_config"]((board / "satip-config.txt").read_text())
+            settings = provision["parse_boot_config"]((board / "satip-config.txt").read_text())
         except (ValueError, UnicodeError):
             raise ValueError("Invalid generic provisioning template") from None
         if settings != {"hostname": "satip-dev"}:

@@ -39,8 +39,65 @@ class DevProvisionTests(unittest.TestCase):
         (self.root / "etc/shadow").write_text("root:*:1:0:99999:7:::\nother:*:1:0:99999:7:::\n")
 
     def test_generic_template_contains_no_access_identity(self):
-        self.assertEqual(provision.parse_config((BOARD / "satip-config.txt").read_text()),
+        self.assertEqual(provision.parse_boot_config((BOARD / "satip-config.txt").read_text()),
                          {"hostname": "satip-dev"})
+
+    def test_boot_file_allowlist_has_only_seven_parameters(self):
+        values = {"hostname": "test-pi", "timezone": "Europe/Berlin",
+                  "ssh_enabled": "yes", "root_password": "literal:$=password",
+                  "wifi_country": "DE", "wifi_ssid": " Netzwerk ", "wifi_psk": " password "}
+        self.assertEqual(provision.BOOT_KEYS, set(values))
+        (self.root / "boot").mkdir()
+        path = self.root / "boot/satip-config.txt"
+        path.write_text("".join(f"{k}={v}\n" for k, v in values.items()))
+        self.assertEqual(provision.read_config(path), values)
+
+    def test_boot_file_rejects_every_legacy_key_without_exposing_values(self):
+        (self.root / "boot").mkdir()
+        path = self.root / "boot/satip-config.txt"
+        for key in provision.KEYS - provision.BOOT_KEYS:
+            with self.subTest(key=key):
+                path.write_text(f"# comment\n{key}=private-obsolete-value\n")
+                with self.assertRaises(provision.ConfigError) as raised:
+                    provision.read_config(path)
+                self.assertEqual(str(raised.exception), "config-unknown:2")
+                with patch("sys.stderr", new_callable=io.StringIO) as log:
+                    self.assertEqual(provision.main(self.root), 1)
+                self.assertNotIn("private-obsolete-value", log.getvalue())
+                self.assertFalse((self.root / "etc/satip-dev-provisioned").exists())
+                self.assertEqual((self.root / "etc/shadow").read_text(),
+                                 "root:*:1:0:99999:7:::\nother:*:1:0:99999:7:::\n")
+
+    def test_boot_parameters_still_validate_before_writes(self):
+        for text, code in (
+                ("hostname=first\nhostname=second", "config-duplicate:2"),
+                ("timezone=../etc", "config-value:1"),
+                ("ssh_enabled=maybe", "config-value:1"),
+                ("root_password=privät", "config-characters:1"),
+                ("wifi_ssid=only", "config-wifi:1"),
+                ("wifi_country=de\nwifi_ssid=test\nwifi_psk=longpassword", "config-value:1"),
+                ("wifi_country=DE\nwifi_ssid=test\nwifi_psk=short", "config-value:3"),
+                ("#" + "a" * 16384, "config-size:0")):
+            with self.subTest(code=code), self.assertRaises(provision.ConfigError) as raised:
+                provision.parse_boot_config(text)
+            self.assertEqual(str(raised.exception), code)
+
+    def test_saved_legacy_settings_and_key_access_survive_boot_restriction(self):
+        (self.root / "run").mkdir()
+        (self.root / "run/satip-data-ready").touch()
+        (self.root / "boot").mkdir()
+        (self.root / "boot/satip-config.txt").write_text("hostname=satip-dev")
+        saved = self.root / "data/store/identity/development.txt"
+        saved.parent.mkdir(parents=True)
+        saved.write_text(f"hostname=legacy-pi\nssh_authorized_key={PUBLIC_KEY}\n"
+                         f"recovery_password_hash={PASSWORD_HASH}\nsetup_password=legacy-password\n"
+                         "lan_access=authenticated\ndrm_connector=HDMI-A-1\nsatip_source=2\n")
+        with patch.object(provision.subprocess, "run"):
+            self.assertEqual(provision.main(self.root), 0)
+        self.assertEqual((self.root / "etc/hostname").read_text(), "legacy-pi\n")
+        self.assertEqual((self.root / "root/.ssh/authorized_keys").read_text(), PUBLIC_KEY + "\n")
+        self.assertEqual((self.root / "etc/satip-ssh-enabled").read_text(), "yes\n")
+        self.assertEqual(provision.parse_config(saved.read_text())["satip_source"], "2")
 
     def test_public_key_and_console_password_modes(self):
         provision.provision(self.root, f"hostname=test-pi\nssh_authorized_key={PUBLIC_KEY} private-comment\n"
@@ -87,7 +144,7 @@ class DevProvisionTests(unittest.TestCase):
 
     def test_failed_boot_publishes_actionable_secret_free_diagnostic(self):
         (self.root / "boot").mkdir()
-        (self.root / "boot/satip-config.txt").write_text("setup_password=x\nsetup_password=private")
+        (self.root / "boot/satip-config.txt").write_text("root_password=x\nroot_password=private")
         with patch("sys.stderr", new_callable=io.StringIO) as log:
             self.assertEqual(provision.main(self.root), 1)
         self.assertEqual((self.root / "run/satip-boot-error").read_text(), "config-duplicate:2\n")
@@ -105,6 +162,11 @@ class DevProvisionTests(unittest.TestCase):
         self.assertIn("root:" + PASSWORD_HASH + ":", (self.root / "etc/shadow").read_text())
         self.assertEqual((self.root / "etc/satip-ssh-enabled").read_text(), "yes\n")
         self.assertFalse((self.root / "root/.ssh/authorized_keys").exists())
+
+    def test_root_password_alone_does_not_enable_ssh_on_new_card(self):
+        with patch.object(provision.subprocess, "run", return_value=types.SimpleNamespace(stdout=PASSWORD_HASH + "\n")):
+            provision.provision(self.root, "root_password=x")
+        self.assertEqual((self.root / "etc/satip-ssh-enabled").read_text(), "no\n")
 
     def test_hash_failure_does_not_write_credentials(self):
         before = (self.root / "etc/shadow").read_bytes()

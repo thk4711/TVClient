@@ -13,11 +13,12 @@ Edit only the flashed card, never the public template or image build inputs.
 `S25satip-data` validates the actual labelled writable data mount before the
 root provisioning module may initialize it. Published images contain a versioned
 `.satip-factory-empty` marker. Their known-empty data initializes automatically,
-with an owned `.fresh-stage` that can resume after interruption. Legacy empty
-partitions can still use explicit `initialize_data=yes`. Existing stores, foreign files, incompatible
-schemas and interrupted `.import-stage` transactions are not overwritten,
-formatted or automatically deleted. [Snapshot-import rules](buildroot-services-persistence.md#first-import-and-backup-boundary) still
-apply; omit `initialize_data` when migrating a private installation.
+with an owned `.fresh-stage` that can resume after interruption. Unmarked empty
+partitions are not initialized; the old `initialize_data` option is no longer
+supported. Existing stores, foreign files, incompatible schemas and interrupted
+`.import-stage` transactions are not overwritten, formatted or automatically
+deleted. [Snapshot-import rules](buildroot-services-persistence.md#first-import-and-backup-boundary)
+still apply when migrating a private installation.
 
 A fresh store is `unconfigured`. Imported data remains `imported-unqualified`
 until separately qualified; the fresh setup path cannot authorize it.
@@ -25,48 +26,53 @@ until separately qualified; the fresh setup path cannot authorize it.
 ## Allowlisted preferences
 
 First setup requires no browser password. New installations default to login-free
-home-LAN management. An optional `setup_password` protects management after setup;
-users can also enable login later by setting a password in Settings.
+home-LAN management. Users can enable browser login later by setting a password
+in Settings; root credentials are independent of browser access.
 
-The existing standalone parser remains `key=value`, not shell. It rejects
-unknown/duplicate keys, oversized files and unsupported values before writing.
-Fields are printable ASCII except UTF-8 Wi-Fi network names; inline comments and shell expansion do not apply.
+The public boot file supports exactly the following seven parameters:
 
 | Fields | Policy |
 | --- | --- |
 | `hostname` | Lower-case DNS label; default `satip-dev` |
-| `ssh_enabled` | `yes` or `no`; SSH defaults off on a fresh card without a key |
-| `root_password` | Plaintext root password for SSH and console; hashed internally, no password-length rule |
-| `ssh_authorized_key`, `recovery_password_hash` | Optional legacy Ed25519 key / SHA-512 hash support; no need to generate either. Specify only one root-password form |
-| `wifi_country`, `wifi_ssid`, `wifi_psk` | All together for WPA2; Ethernet uses existing asynchronous DHCP |
-| `initialize_data` | Optional legacy authorization for empty labelled data; current images initialize automatically |
-| `setup_password` | Optional password for management after setup; first setup stays password-free |
 | `timezone` | Installed zoneinfo name, default `Etc/UTC`; traversal refused |
-| `lan_access` | `login-free` default; an explicit setup password defaults subsequent management to `authenticated` |
-| `drm_connector` | `HDMI-A-1` or `HDMI-A-2`; default retains current HDMI-A-2 |
-| `drm_mode` | 1080p50 default; explicit 1080p60 or 720p50 accepted; automatic fallback only switches between 1080p rates |
-| `audio_device` | Fixed VC4 HDMI ALSA devices only; default retains current vc4hdmi1 |
-| `keyboard_vendor`, `keyboard_product` | Optional additional USB remote identity; standard USB keyboards work automatically |
-| `ir_profile` | Legacy preference accepted for compatibility; GPIO infrared is always enabled alongside USB keyboards |
-| `satip_xml` | Optional description URL on private LAN IPv4 HTTP, ports 80/8080/38400; no credentials, query, redirects, or arbitrary command |
-| `satellite`, `satip_source` | Initially Astra 19.2E, source/position 1–4 |
-| `tuner_number` | Optional preference 1–32; select the actual discovered frontend in UI, not a reference-device UUID |
+| `ssh_enabled` | `yes` or `no`; SSH defaults off on a new card |
+| `root_password` | Plaintext root password for SSH and console; hashed internally, no password-length rule; does not itself enable SSH |
+| `wifi_country`, `wifi_ssid`, `wifi_psk` | All three together for WPA/WPA2 Personal; Ethernet uses asynchronous DHCP |
 
-These are initial preferences, not a web root-command interface. Unsupported
-satellites/LNB arrangements, static network configuration and arbitrary audio
-devices are not silently accepted. Stable DRM paths, HDMI mode, audio and input
-need acceptance on the intended Pi/display. H.264 uses hardware copy decoding with IPC-timeout software
-recovery; MPEG-2 uses software decoding and BWDIF.
+`parse_boot_config` and `read_config` enforce this public allowlist. The file
+remains literal `key=value`, not shell: unknown/obsolete or duplicate keys,
+oversized files and unsupported values are rejected before provisioning writes.
+Diagnostics report only fixed reason codes and line numbers, never values.
+Fields are printable ASCII except UTF-8 Wi-Fi network names. Wi-Fi SSID/password
+spaces are preserved; other values are trimmed. Inline comments, shell expansion
+and quoting do not apply.
 
-Settings and credential seeds are protected on data. Repeating provisioning
-reuses the first browser/backend credential seed. Changing `setup_password`
-after initialization does not reset the browser login. Recovery fields
-(`ssh_enabled`, `root_password` and the optional legacy key/hash fields) may
-be updated in the FAT file and applied on the next boot, including after initial
-setup. Omitting these fields retains saved settings; explicitly use
-`ssh_enabled=no` to disable SSH. Legacy key-only cards continue enabling SSH
-unless explicitly disabled. Other initial preferences are not a supported
-settings-update interface.
+Removed boot options are `initialize_data`, `setup_password`, `lan_access`,
+`drm_connector`, `drm_mode`, `audio_device`, `keyboard_vendor`,
+`keyboard_product`, `ir_profile`, `satip_xml`, `satellite`, `satip_source`,
+`tuner_number`, `ssh_authorized_key` and `recovery_password_hash`.
+Remove these entries from old card files before using them with a new image.
+
+HDMI uses internal defaults and follows the connected Pi HDMI port, adjusting
+the associated standard HDMI audio route. Playback mode fallback is limited to
+supported 1080p refresh rates, not arbitrary resolutions/audio devices. Standard
+USB keyboards and supported GPIO infrared work together automatically; an
+additional USB remote can be selected in the browser. Select/discover the SAT-IP
+server and tuner in browser setup, or choose Enigma2. Initial SAT-IP scanning
+remains fixed to Astra 19.2E and defaults to source/position 1; the GUI does not
+provide arbitrary satellite/position selection.
+
+Saved settings and credential seeds are protected on data. The broader internal
+`parse_config` schema remains available for existing persistent settings,
+configuration backups/restores and generated password hashes. It does not make
+legacy fields valid public boot inputs. Repeating provisioning reuses the original
+browser/backend seed rather than changing credentials or hardware preferences.
+Existing saved key-only access remains supported unless explicitly disabled.
+
+Recovery fields (`ssh_enabled` and `root_password`) may be updated in the FAT
+file and applied on the next boot, including after initial setup. Omitting these
+fields retains saved settings; explicitly use `ssh_enabled=no` to disable SSH.
+Other initial preferences are not a supported settings-update interface.
 Timezone and narrow input rules regenerate in the writable slot; eudev reload
 and a bounded input change-trigger apply them to already-enumerated devices.
 

@@ -63,7 +63,7 @@ static const char *hints[] = {
     "Diagnostics: /run/satip-supervisor/player.log · retrying …",
     "Check the file on the boot partition using a computer",
     "SD card: check satip-data partition, free space and write access",
-    "For a new, empty data partition: set initialize_data=yes",
+    "Factory-empty image marker required; preserve existing data",
     "Error code: /run/satip-boot-error · Preserve existing data",
     "Error code: /run/satip-boot-error · Console: Ctrl+Alt+F2",
     "Check root_password / ssh_enabled · Read boot log over UART",
