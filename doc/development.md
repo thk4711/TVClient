@@ -163,7 +163,13 @@ controller accumulates absolute requested positions, with one worker and one
 replaceable pending target; it does not spawn a task per button event. A
 200 ms coalescing window allows native holds to keep making progress. Other
 controls discard pending targets; current reader transitions finish under the
-existing input lock. Channel generations invalidate stale work, and shutdown
+existing input lock. Paused remote repeats accelerate from 10 to 30 seconds
+after two seconds of kernel hold time, without increasing the event/seek rate
+or changing normal volume steps. Repeats at an unchanged boundary do no work.
+Reader telemetry gaps use the existing requested position rather than clearing
+the accumulated target. `SYN_DROPPED` recovery queries actual held keys at the
+next `SYN_REPORT` so native repeat-only holds can continue without a fresh press.
+Channel generations invalidate stale work, and shutdown
 cancels/joins the worker before closing the player. Cached archive targets seek
 without loadfile; uncached exact targets reopen with a short backward cushion.
 Timestamp gaps select the preceding segment rather than accidentally selecting

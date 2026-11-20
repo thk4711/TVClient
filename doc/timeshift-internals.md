@@ -44,15 +44,24 @@ timestamp, not the tuner. If that point is not yet seekable, TV stays paused and
 shows the building-buffer notice; another Play/Pause retries. Seek requests are
 clamped to retained content. A brief reader transition still needs physical
 picture/sound observation; software timestamp checks alone do not qualify it.
-Thirty-second jumps are segment/keyframe based. Ten-second paused jumps and
-raw-to-archive resume use an exact seek within mpv’s RAM cache once the target
+Keyboard thirty-second jumps are segment/keyframe based. Paused remote jumps
+(including accelerated steps) and raw-to-archive resume use an exact seek within
+mpv’s RAM cache once the target
 is buffered. Broadcaster timestamps/GOPs still constrain actual accuracy.
 Paused seeks display the new frame without resuming sound or playback. Holding
-remote Left/Right uses native repeat handling. Rapid presses accumulate into one
-requested position (five Right presses request approximately +50 seconds), with
+remote Left/Right uses native repeat handling. Linux translates short NEC repeat
+frames into repeats of the last mapped button; no standalone repeat keymap entry
+is needed. After two seconds of kernel-timestamped hold time, paused seek steps
+increase from 10 to 30 seconds, still using exact seeks. Release or a direction
+change resets acceleration. Playing/YouTube volume steps remain unchanged.
+Rapid presses accumulate into one requested position (five Right presses request
+approximately +50 seconds), with
 one seek in progress and at most one updated target waiting. The lower bar shows
 the requested delay during the transition, then the confirmed position. Opposite
 presses adjust that requested position; each request is clamped to retained content.
+Repeats at an unchanged boundary are consumed without reloading the same frame.
+An existing requested position remains the accumulation base if reader telemetry
+temporarily has no position during handover.
 Pause/resume, Return to live and channel changes discard pending seeks.
 An in-progress reader handover finishes safely before another control changes it.
 
@@ -85,6 +94,13 @@ slow I/O are not mistaken for simultaneous switch bounce. Seek logs distinguish
 cache hits from reader handovers and report reader/target phase times. Numeric
 health fields `archive_reads`, `archive_read_seconds`, `archive_read_max_seconds`
 and `archive_read_pending` describe file-read work without exposing media paths.
+
+After `SYN_DROPPED`, input ignores events through the next `SYN_REPORT`, queries
+actual held keys with `EVIOCGKEY`, and restores only repeating buttons without
+dispatching fresh presses. This avoids ignoring every subsequent repeat until
+release/repress, without replaying lost pause/channel actions or retaining phantom
+holds. Acceleration restarts from the resynchronization timestamp. Queue overflows
+log a warning without device paths or private data.
 
 Remote Menu keeps its navigation behaviour inside favourites/details. Close
 an open details panel first, then press Menu again to return to live. To inspect

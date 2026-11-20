@@ -23,6 +23,21 @@ that trimming preserves the session and idle history is not republished.
 health-only updates, eviction, USB-to-RAM transitions, non-blocking slow reads
 and cancellation without overlapping file reads. Remote tests feed queued
 kernel-timestamped events to check debounce and native-repeat spacing.
+`tests/test_timeshift_remote.py` also checks a 20-second native hold, two-second
+3× acceleration, release/direction reset, unchanged playing/YouTube volume,
+history-boundary no-ops and requested-target preservation during reader telemetry
+gaps. Input-overflow tests check `SYN_DROPPED`/`SYN_REPORT` key-state recovery,
+discarded intermediate events, no synthetic pause/tuner handovers, and released
+keys not becoming phantom holds. A restored hold restarts its acceleration delay.
+An isolated virtual-input check on the development Pi also forced a real kernel
+queue overflow while Right remained held. Repeats continued after key-state
+resynchronization, accelerated after two seconds and reset on release/repress.
+This validates native evdev recovery without controlling TV; it does not prove
+that overflow caused the originally reported physical-remote stall.
+The updated player also confirmed all eight ZDF HD forward/backward/alternating
+burst targets across two pause/resume cycles, with unchanged capture identity
+and paused seek state. These are software position checks, not physical
+picture/audio acceptance or a long-history accelerated-hold qualification.
 `validation/test_timeshift_seeking.py` checks that current-session cleanup never
 reloads a reader outside its packet cache or controls a replacement session.
 
@@ -116,6 +131,11 @@ Private raw measurements remain on the development receiver under its
 
 - Observe picture/sound and actual keyboard/Apple Remote pause, resume, seek,
   panel navigation and Return to live, with English/German OSD.
+  Hold remote Left/Right for at least eight seconds with enough history in the
+  chosen direction; verify continued progress and 30-second repeated steps after
+  two seconds. Release/repress and reverse direction to verify 10-second reset.
+  At either retained boundary, verify that TV stays paused and reversing still
+  works. A short buffer can reach a boundary before acceleration becomes visible.
 - Observe exact pause/resume/seek pictures, A/V sync, live/tune delay and sustained
   HD/SD playback across thousands of segment boundaries.
 - Fill retained history until paused/playing positions expire; confirm that the

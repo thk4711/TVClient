@@ -12,6 +12,54 @@ from tests.helpers import Fixture
 
 
 class InputTimestampTests(unittest.IsolatedAsyncioTestCase):
+    async def test_dropped_events_restore_actual_hold_without_replaying_presses(self):
+        callback, on_press = AsyncMock(), AsyncMock(return_value=True)
+        inputs = Inputs(SimpleNamespace(repeat_delay=.5, repeat_interval=.125, debounce=.08),
+                        callback, on_press)
+
+        async def stream():
+            for kind, code, value, stamp in (
+                (1, 115, 1, 10), (1, 115, 2, 10.6),
+                (0, 3, 0, 11), (1, 164, 1, 11.1), (1, 115, 0, 11.2),
+                (0, 0, 0, 11.3), (1, 115, 2, 11.5), (1, 115, 2, 11.9),
+                (1, 115, 2, 13.4), (1, 115, 0, 13.5), (1, 115, 2, 14),
+            ):
+                yield SimpleNamespace(type=kind, code=code, value=value, timestamp=lambda t=stamp: t)
+
+        device = SimpleNamespace(path="remote", async_read_loop=stream, active_keys=Mock(return_value=[115, 164]))
+        await inputs._read(device, "remote")
+        device.active_keys.assert_called_once_with()
+        self.assertEqual([call.args[0] for call in callback.await_args_list],
+                         ["remote_right", "remote_right", "remote_right", "remote_right_fast"])
+        on_press.assert_awaited_once_with("remote_right")
+
+    async def test_dropped_events_do_not_restore_a_released_key(self):
+        callback = AsyncMock()
+        inputs = Inputs(SimpleNamespace(repeat_delay=.5, repeat_interval=.125, debounce=.08), callback)
+
+        async def stream():
+            for kind, code, value, stamp in ((1, 115, 1, 10), (0, 3, 0, 11),
+                                            (0, 0, 0, 11.1), (1, 115, 2, 12)):
+                yield SimpleNamespace(type=kind, code=code, value=value, timestamp=lambda t=stamp: t)
+
+        await inputs._read(SimpleNamespace(path="remote", async_read_loop=stream,
+                                           active_keys=lambda: []), "remote")
+        callback.assert_awaited_once_with("remote_right")
+
+    async def test_long_native_hold_accelerates_using_kernel_time(self):
+        callback = AsyncMock()
+        inputs = Inputs(SimpleNamespace(repeat_delay=.5, repeat_interval=.125, debounce=.08), callback)
+
+        async def stream():
+            for value, stamp in [(1, 10), *[(2, 10.5 + i * .132) for i in range(150)], (0, 31)]:
+                yield SimpleNamespace(type=1, code=114, value=value, timestamp=lambda t=stamp: t)
+
+        with patch("satip_controller.input.time.monotonic", return_value=100):
+            await inputs._read(SimpleNamespace(path="remote", async_read_loop=stream), "remote")
+        self.assertEqual(callback.await_count, 151)
+        self.assertEqual(callback.await_args_list[0].args, ("remote_left",))
+        self.assertEqual(callback.await_args_list[-1].args, ("remote_left_fast",))
+
     async def test_queued_presses_use_kernel_timestamps_not_dispatch_time(self):
         callback = AsyncMock()
         inputs = Inputs(SimpleNamespace(repeat_delay=.5, repeat_interval=.125, debounce=.08), callback)
@@ -73,6 +121,44 @@ class RemoteTests(Fixture, unittest.IsolatedAsyncioTestCase):
         self.player.timeshift_action.assert_not_awaited()
         await self.controller.seek_task
         self.player.timeshift_action.assert_awaited_once_with("skip_forward", target=70)
+
+    async def test_fast_remote_steps_are_three_times_larger_and_still_exact(self):
+        self.player.timeshift.position = 40
+        for action in ("remote_right_fast", "remote_left_fast", "remote_left"):
+            await self.controller.action(action)
+        await self.controller.seek_task
+        self.player.timeshift_action.assert_awaited_once_with("skip_back", target=30)
+
+    async def test_pending_target_survives_temporary_missing_reader_position(self):
+        self.player.timeshift.position = 20
+        await self.controller.action("remote_right")
+        self.player.timeshift.position = None
+        await self.controller.action("remote_right_fast")
+        self.assertEqual(self.controller.seek_target, 60)
+        await self.controller.seek_task
+        self.player.timeshift_action.assert_awaited_once_with("skip_forward", target=60)
+
+    async def test_hold_at_boundary_does_not_reload_the_same_frame(self):
+        self.player.timeshift.position = 99.5
+        for _ in range(20):
+            await self.controller.action("remote_right_fast")
+        self.assertIsNone(self.controller.seek_task)
+        self.player.timeshift_action.assert_not_awaited()
+        await self.controller.action("remote_left")
+        await self.controller.seek_task
+        self.player.timeshift_action.assert_awaited_once_with("skip_back", target=89.5)
+
+    async def test_fast_remote_still_changes_normal_volume_when_playing(self):
+        self.player.timeshift.paused = False
+        await self.controller.action("remote_right_fast")
+        self.player.ipc.command.assert_any_await("set_property", "volume", 40)
+        self.player.timeshift_action.assert_not_awaited()
+
+    async def test_fast_remote_still_changes_normal_volume_on_youtube(self):
+        self.controller.youtube.active = True
+        await self.controller.action("remote_left_fast")
+        self.player.ipc.command.assert_any_await("set_property", "volume", 30)
+        self.player.timeshift_action.assert_not_awaited()
 
     async def test_opposite_presses_accumulate_from_requested_not_stale_position(self):
         self.player.timeshift.position = 20
@@ -177,6 +263,23 @@ class RemoteTests(Fixture, unittest.IsolatedAsyncioTestCase):
         self.assertEqual(policy.feed("r", "remote", 115, 1, 0), "remote_right")
         self.assertIsNone(policy.feed("r", "remote", 115, 2, .3))
         self.assertEqual(policy.feed("r", "remote", 115, 2, .5), "remote_right")
+
+    def test_acceleration_resets_on_release_and_direction_change(self):
+        policy = Policy()
+        policy.feed("r", "remote", 115, 1, 0)
+        self.assertEqual(policy.feed("r", "remote", 115, 2, 2), "remote_right_fast")
+        policy.feed("r", "remote", 115, 0, 2.1)
+        self.assertEqual(policy.feed("r", "remote", 115, 1, 2.2), "remote_right")
+        self.assertEqual(policy.feed("r", "remote", 115, 2, 2.8), "remote_right")
+        self.assertEqual(policy.feed("r", "remote", 115, 2, 4.3), "remote_right_fast")
+        self.assertEqual(policy.feed("r", "remote", 114, 1, 4.4), "remote_left")
+        self.assertEqual(policy.feed("r", "remote", 114, 2, 5), "remote_left")
+        self.assertIsNone(policy.feed("r", "remote", 115, 2, 5.1))
+
+    def test_keyboard_volume_does_not_accelerate(self):
+        policy = Policy()
+        policy.feed("k", "keyboard", 115, 1, 0)
+        self.assertEqual(policy.feed("k", "keyboard", 115, 2, 10), "volume_up")
 
 
 class SeekTests(unittest.IsolatedAsyncioTestCase):

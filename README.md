@@ -52,7 +52,7 @@ LAN discovery, browser bouquet import and separate source lineups.
   then choose your favourites. Overlapping bouquet services are deduplicated.
   Settings survive restarts.
 - [USB time shifting](doc/timeshift.md): pause and seek HDMI TV
-  using a connected USB drive.
+  using a connected USB drive, with faster seeking when you hold remote Left/Right.
 - [YouTube reception](doc/youtube.md): pair a phone with a TV code
   and play compatible public videos on HDMI.
 

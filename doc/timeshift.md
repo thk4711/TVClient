@@ -30,6 +30,10 @@ Without usable storage, Pause/seek shows an unavailable notice and TV stays live
 Close an open favourites/details panel before using Esc or Menu to return to live.
 While paused, repeated remote seek presses accumulate into a requested position;
 five Right presses request about 50 seconds forward, within the available history.
+Hold Left or Right to keep seeking. After about two seconds, each repeated step
+increases from 10 to 30 seconds (three times the normal pace). Release the button
+or change direction to return to 10-second steps. Seeking stops at the retained
+history boundaries; reaching the live edge stays paused and does not end buffering.
 Seek accuracy depends on the broadcast. A short transition may occur when resuming
 or seeking. If the buffer-building notice appears, wait and retry Play/Pause.
 

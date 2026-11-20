@@ -32,7 +32,9 @@ appear before the final choice.
 
 Pause/resume requires usable USB storage. While delayed, the lower bar shows
 buffered position and delay; remote Left/Right seeks only while paused, otherwise
-it adjusts volume. Close navigation panels before using Esc/Menu to return to live.
+it adjusts volume. Holding remote Left/Right for about two seconds increases
+paused seek steps from 10 to 30 seconds; release or change direction to reset.
+Close navigation panels before using Esc/Menu to return to live.
 Use [time-shift controls](timeshift.md#playback-controls) for retention and seeking
 limits. During YouTube, Play/Pause and volume control that video.
 

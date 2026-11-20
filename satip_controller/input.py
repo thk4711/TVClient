@@ -9,6 +9,7 @@ BINDINGS = {103: "next", 108: "previous", 106: "volume_up", 105: "volume_down",
             113: "menu", 28: "menu", 352: "menu", 50: "pause", 164: "pause",
             358: "info", 23: "info", 1: "back", 139: "back"}
 REPEATING = {"volume_up", "volume_down", "remote_right", "remote_left"}
+REMOTE_SEEK_ACCELERATION_SECONDS = 2
 LOG = logging.getLogger(__name__)
 
 
@@ -36,6 +37,14 @@ class Policy:
     def remove(self, device):
         self.held = {k: v for k, v in self.held.items() if k[0] != device}
 
+    def restore(self, device, group, codes, now):
+        # EVIOCGKEY after SYN_DROPPED: resume only genuinely held repeating
+        # buttons. Do not invent presses/tuner handovers or replay lost events.
+        self.remove(device)
+        for code in codes:
+            if binding(group, code) in REPEATING:
+                self.held[device, code] = [now, now]
+
     def feed(self, device, group, code, value, now):
         # The remote centre shares KEY_MUTE with keyboard multimedia mute.
         action = binding(group, code)
@@ -48,6 +57,12 @@ class Policy:
         if value == 1:
             if key in self.held:
                 return None
+            if action in ("remote_left", "remote_right"):
+                # A direction change starts a new short hold, even if the old
+                # button's release has not yet arrived.
+                opposite = "remote_right" if action == "remote_left" else "remote_left"
+                self.held = {k: v for k, v in self.held.items()
+                             if k[0] != device or binding(group, k[1]) != opposite}
             self.held[key] = [now, now]
             previous = self.last_press.get((group, action), -100)
             if now - previous < self.debounce:
@@ -60,6 +75,8 @@ class Policy:
             if now-start >= self.delay and now-last >= self.interval and now-group_last >= self.interval:
                 self.held[key][1] = now
                 self.last_repeat[group, action] = now
+                if action in ("remote_left", "remote_right") and now-start >= REMOTE_SEEK_ACCELERATION_SECONDS:
+                    return action + "_fast"
                 return action
         return None
 
@@ -130,10 +147,22 @@ class Inputs:
                 await self._remove(path)
 
     async def _read(self, device, group):
+        dropped = False
         try:
             async for event in device.async_read_loop():
                 if event.type == 0 and event.code == 3:  # SYN_DROPPED: do not retain phantom holds
                     self.policy.remove(device.path)
+                    dropped = True
+                    LOG.warning("Input queue overflow (%s); resynchronizing held buttons", group)
+                    continue
+                if dropped:
+                    # Linux requires ignoring events through the next SYN_REPORT
+                    # and querying actual key state, not waiting for a fresh press.
+                    if event.type == 0 and event.code == 0:
+                        self.policy.restore(device.path, group, device.active_keys(),
+                                            getattr(event, "timestamp", time.monotonic)())
+                        dropped = False
+                    continue
                 if event.type != 1:
                     continue
                 # Physical key-down only, including unmapped keys. Releases and

@@ -140,18 +140,27 @@ class Controller:
 
     def queue_seek(self, action):
         ts = getattr(self.player, "timeshift", None)
-        if (self.youtube.active or not ts or not ts.active or ts.position is None
+        if (self.youtube.active or not ts or not ts.active
                 or not ts.ranges or not self.playing or self.playing != self.requested or self.paused):
             return False
-        if action in ("remote_left", "remote_right"):
+        multiplier = 1
+        if action in ("remote_left", "remote_right", "remote_left_fast", "remote_right_fast"):
             if not ts.paused:
                 return False
-            action = "skip_back" if action == "remote_left" else "skip_forward"
+            multiplier = 3 if action.endswith("_fast") else 1
+            action = "skip_back" if action.startswith("remote_left") else "skip_forward"
         delta = {"skip_back": -10, "skip_forward": 10, "seek_back": -30, "seek_forward": 30}.get(action)
         if delta is None:
             return False
         base = ts.position if self.seek_requested is None else self.seek_requested
-        self.seek_target = self.seek_requested = max(ts.ranges[0][0], min(ts.ranges[-1][1] - .5, base + delta))
+        if base is None:
+            return False
+        target = max(ts.ranges[0][0], min(ts.ranges[-1][1] - .5, base + delta * multiplier))
+        # Repeating against a retained-history boundary is a consumed no-op,
+        # not another expensive reload of exactly the same frame.
+        if target == base:
+            return True
+        self.seek_target = self.seek_requested = target
         self.seek_action = action
         if self.seek_task is None or self.seek_task.done():
             self.seek_task = asyncio.create_task(self.run_seeks())
@@ -190,13 +199,13 @@ class Controller:
         self.clear_pending_seek()
         async with self.input_lock:
             try:
-                if action in ("remote_left", "remote_right"):
+                if action in ("remote_left", "remote_right", "remote_left_fast", "remote_right_fast"):
                     timeshift = getattr(self.player, "timeshift", None)
                     if (not self.youtube.active and timeshift and timeshift.config and timeshift.paused
                             and self.playing == self.requested and self.playing and not self.paused):
-                        action = "skip_back" if action == "remote_left" else "skip_forward"
+                        action = "skip_back" if action.startswith("remote_left") else "skip_forward"
                     else:
-                        action = "volume_down" if action == "remote_left" else "volume_up"
+                        action = "volume_down" if action.startswith("remote_left") else "volume_up"
                 timeshift = getattr(self.player, "timeshift", None)
                 # Apple Menu emits KEY_INFO, not KEY_BACK.
                 if (action == "info" and self.menu_index is None and self.details is None

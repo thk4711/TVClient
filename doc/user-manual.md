@@ -456,7 +456,7 @@ A drive needs at least 2 GiB free to mount; formatting requires a drive of at le
 | Back / forward about 10 seconds while paused | Not assigned | Left / Right |
 | Return to live with no navigation panel open | Home or Esc | Menu |
 
-The lower TV bar shows your delay behind live and buffered position. While the remote is paused, Left/Right seeks; while playing, it adjusts volume. Repeated seek presses move farther, but seek accuracy depends on the broadcast. Without usable USB storage, Pause shows an unavailable notice and TV stays live.
+The lower TV bar shows your delay behind live and buffered position. While TV is paused, remote Left/Right seeks; while playing, it adjusts volume. Taps move about 10 seconds. Hold Left or Right to keep seeking: after about two seconds, repeated steps increase to 30 seconds, three times the normal pace. Release the button or change direction to reset to 10-second steps. Seeking stops at the available-history boundaries; reaching the live edge stays paused and does not end buffering. Seek accuracy and picture-update speed depend on the broadcast and storage. Without usable USB storage, Pause shows an unavailable notice and TV stays live.
 
 Old content is removed when the buffer fills. If your paused position expires, it moves to retained content and stays paused. **Return to live** ends that buffer session. Before unplugging the drive, select **Safely remove USB** in Settings and wait for success. Do not unplug after a failed removal. **Forget USB configuration** clears the remembered drive after removal; it does not erase the drive.
 
