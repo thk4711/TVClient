@@ -5,10 +5,44 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 from satip_controller.controller import Controller
-from satip_controller.input import binding, Policy
+from satip_controller.input import binding, Policy, Inputs
 from satip_controller.osd import OSD, timeshift_panel, elapsed_label
 from satip_controller.timeshift import Timeshift
 from tests.helpers import Fixture
+
+
+class InputTimestampTests(unittest.IsolatedAsyncioTestCase):
+    async def test_queued_presses_use_kernel_timestamps_not_dispatch_time(self):
+        callback = AsyncMock()
+        inputs = Inputs(SimpleNamespace(repeat_delay=.5, repeat_interval=.125, debounce=.08), callback)
+        events = []
+        for i in range(5):
+            for value, offset in ((1, 0), (0, .04)):
+                stamp = 10 + i * .15 + offset
+                events.append(SimpleNamespace(type=1, code=115, value=value, timestamp=lambda t=stamp: t))
+
+        async def stream():
+            for event in events:
+                yield event
+
+        device = SimpleNamespace(path="remote", async_read_loop=stream)
+        with patch("satip_controller.input.time.monotonic", return_value=100):
+            await inputs._read(device, "remote")
+        self.assertEqual(callback.await_count, 5)
+        self.assertTrue(all(call.args == ("remote_right",) for call in callback.await_args_list))
+
+    async def test_queued_native_repeats_keep_event_spacing_and_filter_bounce(self):
+        callback = AsyncMock()
+        inputs = Inputs(SimpleNamespace(repeat_delay=.5, repeat_interval=.125, debounce=.08), callback)
+
+        async def stream():
+            for value, stamp in ((1, 10), (2, 10.2), (2, 10.6), (2, 10.75),
+                                 (0, 10.8), (1, 10.85), (0, 10.86), (1, 10.87)):
+                yield SimpleNamespace(type=1, code=115, value=value, timestamp=lambda t=stamp: t)
+
+        with patch("satip_controller.input.time.monotonic", return_value=100):
+            await inputs._read(SimpleNamespace(path="remote", async_read_loop=stream), "remote")
+        self.assertEqual(callback.await_count, 4)
 
 
 class RemoteTests(Fixture, unittest.IsolatedAsyncioTestCase):

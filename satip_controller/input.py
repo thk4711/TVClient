@@ -103,6 +103,12 @@ class Inputs:
                         if not group:
                             device.close()
                             continue
+                        # EVIOCSCLOCKID: debounce/repeat must use the time the
+                        # kernel received each event, not when slow archive I/O
+                        # finally lets the controller drain queued key presses.
+                        import fcntl
+                        import struct
+                        fcntl.ioctl(device.fd, 0x400445a0, struct.pack("i", time.CLOCK_MONOTONIC))
                         if self.config.grab:
                             device.grab()
                         self.devices[path] = device
@@ -135,7 +141,8 @@ class Inputs:
                 if event.value == 1 and self.on_press is not None:
                     if not await self.on_press(binding(group, event.code)):
                         continue
-                action = self.policy.feed(device.path, group, event.code, event.value, time.monotonic())
+                action = self.policy.feed(device.path, group, event.code, event.value,
+                                          getattr(event, "timestamp", time.monotonic)())
                 if action:
                     await self.callback(action)
         except OSError:

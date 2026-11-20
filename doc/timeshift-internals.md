@@ -65,6 +65,27 @@ reader, not the tuner/capture; the first raw-to-archive seek also needs that
 handover. Archive playback crosses
 segment boundaries over a single continuous response; live is raw passthrough.
 
+The relay caches its merged timeline and filename lookup until RAM/USB content
+or archive activation changes. Health-only RAM publications still update health
+freshness without rebuilding thousands of historical entries. Each streamed
+segment uses a constant-time filename lookup, not a history scan. Writer death,
+readiness and errors are checked even when the timeline is unchanged.
+
+Archive file reads run in a worker thread, not on the controller's asyncio loop.
+There is at most one outstanding file read per rolling buffer. Cancelling an
+obsolete socket leaves that read owned until it completes; replacement readers
+wait asynchronously instead of accumulating workers. The worker snapshots the
+RAM/USB directories and closes the file before socket backpressure. Shutdown
+allows two seconds for an outstanding read, then explicitly refuses to claim
+storage is safe to remove. A kernel-blocked read cannot be cancelled by Python.
+
+Input devices request the Linux monotonic event clock (EVIOCSCLOCKID). Debounce
+and native repeat use kernel event timestamps, so valid presses queued during
+slow I/O are not mistaken for simultaneous switch bounce. Seek logs distinguish
+cache hits from reader handovers and report reader/target phase times. Numeric
+health fields `archive_reads`, `archive_read_seconds`, `archive_read_max_seconds`
+and `archive_read_pending` describe file-read work without exposing media paths.
+
 Remote Menu keeps its navigation behaviour inside favourites/details. Close
 an open details panel first, then press Menu again to return to live. To inspect
 programme details while delayed, open favourites with Centre, then press Menu.
@@ -142,6 +163,12 @@ capture stopped**. These are distinct from USB readiness and write failures.
 The USB history index is published only when content/readiness/settings change;
 idle polling does not repeatedly serialize the entire retained history. RAM
 capture freshness uses elapsed monotonic time, not the device's wall clock.
+Eviction comparisons build one retained-filename set per calculation, then scan
+history once. Both new-segment and idle/settings-trim paths must remain linear
+in retained segment count: rebuilding the set for every historical item causes
+long sessions to consume progressively more CPU, even without any evictions.
+The copier must keep up with the short RAM window; increasing USB capacity or
+suppressing missing-segment recovery does not repair a copier backlog.
 
 ## Mounting persistence and removal
 

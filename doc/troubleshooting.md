@@ -73,6 +73,28 @@ content; `usb_write`/`usb_publish` indicate copy/publication failure, and
 mount readiness and kernel USB/I/O messages separately; a copier error is not
 proof of physical USB removal. Do not format the drive merely for this notice.
 
+**Time-shift capture fell behind** with `ram_segment`, `FileNotFoundError` and
+`errno=2` means required content expired from the short RAM prebuffer before
+the USB copier could open it. Check copier CPU load as well as USB I/O. A failure
+only after history grows can indicate inefficient history processing, not a full
+drive or an invalid forward-seek request. Current copier cleanup builds retained
+filename sets once per comparison; older versions rebuilt them per segment in
+both copy and idle-trim paths. Increasing the USB budget does not speed this up.
+Install matching application files via the [in-place update procedure](operations.md#updates),
+then repeat the [long-session check](timeshift-validation.md#running-device-checks).
+
+**Seeking becomes sluggish as USB history grows:** older video can fall out of
+Linux's RAM file cache, so a reader handover must fetch it from USB. USB 3 link
+speed alone does not guarantee fast media reads. Synchronous archive reads in
+older application versions also blocked input processing; dispatch-time debounce
+could then drop legitimate queued presses. Current versions read off the
+controller loop, reuse unchanged history/filename indexes and debounce using
+kernel monotonic event timestamps. Check seek phase logs and numeric `archive_*`
+health fields; compare cache-hit seeks with uncached reader reloads. Follow the
+[current-session diagnostic](timeshift-validation.md#running-device-checks)
+before restarting the player, because restart discards the useful history.
+Updates improve responsiveness but cannot eliminate USB/decoder handover latency.
+
 A live-reader queue-overflow warning while paused can be expected: the bounded
 live reader stops consuming, while capture continues. That warning alone is
 not evidence of a USB failure. See [time-shift validation](timeshift-validation.md)

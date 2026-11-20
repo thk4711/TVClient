@@ -3,6 +3,7 @@ import asyncio
 import copy
 from pathlib import Path
 import tempfile
+import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
@@ -322,6 +323,7 @@ class RelayLifecycleTests(unittest.IsolatedAsyncioTestCase):
             (buffer.directory / item["name"]).write_bytes(b"x" * item["bytes"])
             buffer.process = SimpleNamespace(returncode=None)
             buffer.segments = [item]
+            buffer.segment_by_name = {item["name"]: item}
             buffer.refresh = Mock()
             buffer.server = await asyncio.start_server(buffer.serve, "127.0.0.1", 0)
             port = buffer.server.sockets[0].getsockname()[1]
@@ -358,11 +360,163 @@ class RelayLifecycleTests(unittest.IsolatedAsyncioTestCase):
             atomic_json(buffer.index, {"segments": items, "config": CONFIG, "error": ""})
             buffer.process = SimpleNamespace(returncode=None)
             buffer.refresh()
+            timeline = buffer.segments
+            lookup = buffer.segment_by_name
             buffer.refresh()
+            self.assertIs(buffer.segments, timeline)
+            self.assertIs(buffer.segment_by_name, lookup)
             self.assertEqual(buffer.segments, [{**s, "location": "ram"} for s in items])
             buffer.process.returncode = 1
             buffer.refresh()
             self.assertIn("prebuffer", buffer.error)
+
+    def test_large_history_rebuilds_only_for_content_or_mode_changes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            buffer = RollingBuffer()
+            buffer.index = Path(temp) / "ram.json"
+            buffer.disk_index = Path(temp) / "usb.json"
+            buffer.disk_enabled = True
+            items = [segment(i, i * 2, i * 2 + 2, 1) for i in range(4096)]
+            atomic_json(buffer.index, {"segments": items[-10:], "health": {"upstream_age": 0}})
+            atomic_json(buffer.disk_index, {"segments": items, "ready": True, "config": CONFIG})
+            buffer.refresh()
+            timeline, lookup = buffer.segments, buffer.segment_by_name
+            for _ in range(20):
+                buffer.refresh()
+                self.assertIs(buffer.segments, timeline)
+                self.assertIs(buffer.segment_by_name, lookup)
+            atomic_json(buffer.index, {"segments": items[-10:], "health": {"upstream_age": 1}})
+            buffer.refresh()
+            self.assertEqual(buffer.capture_health, {"upstream_age": 1})
+            self.assertIs(buffer.segments, timeline)
+            atomic_json(buffer.disk_index, {"segments": items, "ready": False, "error": "failed"})
+            buffer.refresh()
+            self.assertFalse(buffer.disk_ready)
+            self.assertEqual(buffer.disk_error, "failed")
+            self.assertIs(buffer.segments, timeline)
+            atomic_json(buffer.disk_index, {"segments": items[1:]})
+            buffer.refresh()
+            self.assertNotIn(items[0]["name"], buffer.segment_by_name)
+            self.assertEqual(buffer.segments[-1]["location"], "usb")
+            buffer.disk_enabled = False
+            buffer.refresh()
+            self.assertEqual(len(buffer.segments), 10)
+            self.assertEqual(buffer.segments[-1]["location"], "ram")
+            buffer.index.unlink()
+            buffer.refresh()
+            self.assertEqual(buffer.segments, [])
+            atomic_json(buffer.index, {"segments": items[-1:]})
+            buffer.refresh()
+            self.assertEqual(len(buffer.segments), 1)
+
+    async def test_slow_archive_read_does_not_block_input_or_accumulate_workers(self):
+        buffer = RollingBuffer()
+        buffer.directory = Path("/ram/original")
+        buffer.disk_directory = Path("/usb/original")
+        buffer.disk_enabled = True
+        entered = asyncio.Event()
+        release = threading.Event()
+        loop = asyncio.get_running_loop()
+        calls = []
+
+        def read(item, directories):
+            calls.append((item, directories))
+            loop.call_soon_threadsafe(entered.set)
+            if not release.wait(3):
+                raise OSError("Test read timed out")
+            return b"programme"
+
+        buffer.read_segment = Mock(side_effect=read)
+        first = asyncio.create_task(buffer.read_archive(segment(0, 0, 2)))
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            first.cancel()
+            await asyncio.gather(first, return_exceptions=True)
+            pending = buffer.archive_read
+            self.assertIsNotNone(pending)
+            self.assertFalse(pending.cancelled())
+            second = asyncio.create_task(buffer.read_archive(segment(1, 2, 4)))
+            await asyncio.sleep(.02)
+            self.assertEqual(len(calls), 1)
+            self.assertFalse(second.done())
+            self.assertEqual(calls[0][1], (Path("/usb/original"), Path("/ram/original")))
+            release.set()
+            self.assertEqual(await asyncio.wait_for(second, 1), b"programme")
+            self.assertEqual(len(calls), 2)
+            self.assertIsNone(buffer.archive_read)
+            self.assertEqual(buffer.diagnostics()["archive_reads"], 2)
+        finally:
+            release.set()
+            if buffer.archive_read:
+                await asyncio.gather(buffer.archive_read, return_exceptions=True)
+
+    async def test_obsolete_read_failure_is_consumed_and_next_reader_can_continue(self):
+        buffer = RollingBuffer()
+        buffer.directory = Path("/ram")
+        entered = asyncio.Event()
+        release = threading.Event()
+        loop = asyncio.get_running_loop()
+
+        def read(item, directories):
+            loop.call_soon_threadsafe(entered.set)
+            release.wait(3)
+            raise FileNotFoundError("expired")
+
+        buffer.read_segment = Mock(side_effect=read)
+        first = asyncio.create_task(buffer.read_archive(segment(0, 0, 2)))
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            first.cancel()
+            await asyncio.gather(first, return_exceptions=True)
+            second = asyncio.create_task(buffer.read_archive(segment(1, 2, 4)))
+            await asyncio.sleep(0)
+            buffer.read_segment = Mock(return_value=b"next")
+            release.set()
+            self.assertEqual(await asyncio.wait_for(second, 1), b"next")
+        finally:
+            release.set()
+            if buffer.archive_read:
+                await asyncio.gather(buffer.archive_read, return_exceptions=True)
+
+    async def test_close_refuses_safe_storage_claim_while_read_is_still_blocked(self):
+        worker = Mock()
+        buffer = RollingBuffer(worker=worker)
+        buffer.process = Mock(release=AsyncMock())
+        process = buffer.process
+        buffer.deactivate = AsyncMock()
+        entered = asyncio.Event()
+        release = threading.Event()
+        loop = asyncio.get_running_loop()
+
+        def read(item, directories):
+            loop.call_soon_threadsafe(entered.set)
+            release.wait(4)
+            return b"programme"
+
+        buffer.read_segment = Mock(side_effect=read)
+        first = asyncio.create_task(buffer.read_archive(segment(0, 0, 2)))
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            first.cancel()
+            await asyncio.gather(first, return_exceptions=True)
+            pending = buffer.archive_read
+            with self.assertRaisesRegex(OSError, "storage is not safe"):
+                await buffer.close()
+            self.assertIs(buffer.archive_read, pending)
+            self.assertFalse(pending.done())
+            process.release.assert_not_awaited()
+            worker.retire.assert_not_called()
+            release.set()
+            await pending
+            await buffer.close()
+            await buffer.close()
+            process.release.assert_awaited_once()
+            worker.retire.assert_called_once()
+            self.assertIsNone(buffer.process)
+        finally:
+            release.set()
+            if buffer.archive_read:
+                await asyncio.gather(buffer.archive_read, return_exceptions=True)
 
     async def test_new_storage_triggers_one_live_reload_not_a_retry_loop(self):
         timeshift = Timeshift()

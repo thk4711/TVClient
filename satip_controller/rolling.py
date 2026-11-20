@@ -101,6 +101,12 @@ def retained(segments, budget, minutes, free):
 
 
 
+def removed_segments(segments, keep):
+    """Find evictions in linear time, including when nothing was removed."""
+    names = {item["name"] for item in keep}
+    return [item for item in segments if item["name"] not in names]
+
+
 def ram_storage(directory):
     """Require real tmpfs; /run is not permission to fall back to the SD card."""
     directory = directory.absolute()
@@ -500,7 +506,7 @@ def copy_usb(directory, ram_directory, ram_index, index, parent_fd, position):
                 last_end = item["end"]
                 space = os.statvfs(directory)
                 keep = retained(items, config["max_bytes"], config["minutes"], space.f_bavail * space.f_frsize)
-                removed = [s for s in items if s["name"] not in {k["name"] for k in keep}]
+                removed = removed_segments(items, keep)
                 items = keep
                 ready = any(s["start"] <= position <= s["end"] for s in items) if not ready else True
                 # Publish readiness promptly, then batch later additions below.
@@ -512,7 +518,7 @@ def copy_usb(directory, ram_directory, ram_index, index, parent_fd, position):
             # Apply a changed budget even when no new segment completed.
             space = os.statvfs(directory)
             keep = retained(items, config["max_bytes"], config["minutes"], space.f_bavail * space.f_frsize)
-            removed = [s for s in items if s["name"] not in {k["name"] for k in keep}]
+            removed = removed_segments(items, keep)
             items = keep
             signature = (tuple(s["name"] for s in items), dict(config), ready)
             if signature != published:
@@ -562,6 +568,12 @@ class RollingBuffer:
         self.directory = None
         self.index = None
         self.segments = []
+        self.segment_by_name = {}
+        self.timeline_sources = None
+        self.archive_read = None
+        self.archive_reads = 0
+        self.archive_read_seconds = 0
+        self.archive_read_max = 0
         self.config = None
         self.error = ""
         self.origin = 0
@@ -605,13 +617,17 @@ class RollingBuffer:
             if stamp != self.index_stamp:
                 data = read_json(self.index) if self.index else {}
                 self.index_stamp = stamp
-                self.ram_segments = data.get("segments", [])
+                segments = data.get("segments", [])
+                if segments != self.ram_segments:
+                    self.ram_segments = segments
                 self.error = data.get("error", "")
                 self.capture_health = data.get("health", {})
                 self.capture_health_at = time.monotonic()
                 self.capture_failure = data.get("failure", {})
         except FileNotFoundError:
-            self.ram_segments = []
+            if self.ram_segments:
+                self.ram_segments = []
+            self.index_stamp = None
         if self.process and self.process.returncode is not None:
             self.error = self.error or "Time-shift prebuffer unavailable – returning to live TV"
         if self.disk_enabled:
@@ -620,7 +636,9 @@ class RollingBuffer:
                 if stamp != self.disk_stamp:
                     data = read_json(self.disk_index)
                     self.disk_stamp = stamp
-                    self.disk_segments = data.get("segments", [])
+                    segments = data.get("segments", [])
+                    if segments != self.disk_segments:
+                        self.disk_segments = segments
                     self.disk_ready = data.get("ready") is True
                     self.disk_error = data.get("error", "")
                     self.disk_failure = data.get("failure", {})
@@ -629,10 +647,16 @@ class RollingBuffer:
                 pass
             if self.disk_process and self.disk_process.returncode is not None:
                 self.disk_error = self.disk_error or "USB time-shift storage error – returning to live TV"
+        sources = (self.ram_segments, self.disk_segments if self.disk_enabled else None)
+        if self.timeline_sources is not None and all(
+                current is previous for current, previous in zip(sources, self.timeline_sources)):
+            return
+        self.timeline_sources = sources
         items = {s["name"]: {**s, "location": "ram"} for s in self.ram_segments}
         if self.disk_enabled:
             items.update({s["name"]: {**s, "location": "usb"} for s in self.disk_segments})
         self.segments = sorted(items.values(), key=lambda s: s["start"])
+        self.segment_by_name = items
 
     async def feed_raw(self):
         try:
@@ -672,6 +696,10 @@ class RollingBuffer:
                   "relay_age": round(now - self.raw_at, 3) if self.raw_at is not None else None,
                   "relay_overflow": self.raw_overflow,
                   "relay_queue_chunks": max((q.qsize() for q in self.live_clients.values()), default=0)}
+        health.update(archive_reads=self.archive_reads,
+                      archive_read_seconds=round(self.archive_read_seconds, 3),
+                      archive_read_max_seconds=round(self.archive_read_max, 3),
+                      archive_read_pending=self.archive_read is not None)
         # Only fixed numeric fields, never paths, authentication or raw metadata.
         for name in ("upstream_bytes", "upstream_age", "capture_write_age", "capture_queue_chunks"):
             value = self.capture_health.get(name)
@@ -802,16 +830,58 @@ class RollingBuffer:
         self.disk_error = ""
         self.refresh()
 
-    def read_segment(self, item):
-        directories = [self.directory]
-        if self.disk_enabled and self.disk_directory:
-            directories.insert(0, self.disk_directory)
+    def read_segment(self, item, directories=None):
+        if directories is None:
+            directories = [self.directory]
+            if self.disk_enabled and self.disk_directory:
+                directories.insert(0, self.disk_directory)
         for directory in directories:
             try:
                 return (directory / item["name"]).read_bytes()
             except FileNotFoundError:
                 continue
         raise FileNotFoundError("Retained segment expired")
+
+    async def read_archive(self, item):
+        # Cancelling a socket cannot cancel a running filesystem read. Keep its
+        # task owned until completion; a replacement reader waits rather than
+        # accumulating workers/buffers during rapid cache-miss seeks.
+        while self.archive_read is not None:
+            await asyncio.shield(self.archive_read)
+        directories = [self.directory]
+        if self.disk_enabled and self.disk_directory:
+            directories.insert(0, self.disk_directory)
+        started = time.monotonic()
+        directories = tuple(directories)
+
+        def read():
+            try:
+                return self.read_segment(item, directories), None
+            except OSError as error:
+                # Carry expected expiry/I/O errors as data. Python 3.14 logs
+                # exceptions in shielded tasks after their waiter is cancelled,
+                # even when another owner explicitly retrieves that exception.
+                return None, error
+
+        task = asyncio.create_task(asyncio.to_thread(read))
+        self.archive_read = task
+
+        def finished(done):
+            elapsed = time.monotonic() - started
+            self.archive_reads += 1
+            self.archive_read_seconds += elapsed
+            self.archive_read_max = max(self.archive_read_max, elapsed)
+            if self.archive_read is done:
+                self.archive_read = None
+            # Retrieve errors even if the owning socket was cancelled.
+            if not done.cancelled():
+                done.exception()
+
+        task.add_done_callback(finished)
+        data, error = await asyncio.shield(task)
+        if error is not None:
+            raise error
+        return data
 
     async def start(self, upstream, header, runtime):
         self.config = storage()
@@ -902,10 +972,10 @@ class RollingBuffer:
                 self.refresh()
                 if self.error:
                     break
-                item = next((s for s in self.segments if int(s["name"][8:17]) == sequence), None)
+                item = self.segment_by_name.get(f"segment-{sequence:09d}.ts")
                 if item:
                     # Never retain an open unlinked segment over socket waits.
-                    data = self.read_segment(item)
+                    data = await self.read_archive(item)
                     for offset in range(0, len(data), 64 * 1024):
                         writer.write(data[offset:offset + 64 * 1024])
                         # A paused player may intentionally stop reading for
@@ -940,7 +1010,11 @@ class RollingBuffer:
     async def close(self):
         if self.worker:
             from .lifecycle import complete
-            if self.close_task is None:
+            # A blocked archive read can outlive the bounded close attempt.
+            # Retry failed cleanup once it finishes, while sharing successful
+            # or still-running cleanup across repeated callers.
+            if (self.close_task is None or self.close_task.done()
+                    and not self.close_task.cancelled() and self.close_task.exception() is not None):
                 self.close_task = asyncio.create_task(self._close())
             await complete(self.close_task)
         else:
@@ -956,6 +1030,12 @@ class RollingBuffer:
         # Python 3.13+ wait_closed() also waits for active client transports.
         # Cancel/abort those first, otherwise channel changes deadlock here.
         await self.disconnect()
+        if self.archive_read is not None:
+            try:
+                async with asyncio.timeout(2):
+                    await asyncio.shield(self.archive_read)
+            except TimeoutError:
+                raise OSError("Archive read has not stopped; storage is not safe to remove") from None
         if server:
             await server.wait_closed()
         LOG.debug("Rolling readers closed")

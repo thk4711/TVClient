@@ -318,6 +318,7 @@ class Timeshift:
             self.ranges = ranges(await ipc.get("demuxer-cache-state"))
 
     async def jump(self, target, ipc, precise=False):
+        started = time.monotonic()
         if self.buffer and not self.buffer.live_reader:
             cached = ranges(await ipc.get("demuxer-cache-state"))
             local = target - self.buffer.origin
@@ -328,6 +329,8 @@ class Timeshift:
                 await self.wait_seek(ipc)
                 await self.sample(ipc)
                 self.seek_until = time.monotonic() + 8
+                logging.getLogger(__name__).info("Time-shift seek phases: cache=hit total=%.3fs",
+                                                 time.monotonic() - started)
                 return
         if self.buffer:
             # A little history before an exact target makes the next backward
@@ -338,6 +341,7 @@ class Timeshift:
             # The relay is continuous/non-seekable. Start at this keyframe,
             # rather than requesting an unsupported demuxer startup seek.
             await self.reload(path, 0, self.paused)
+            reloaded = time.monotonic()
             deadline = time.monotonic() + 4
             while time.monotonic() < deadline:
                 try:
@@ -365,6 +369,9 @@ class Timeshift:
                     raise IPCError("Time-shift position is not yet seekable", reason="timeshift_seek_unavailable")
             await self.sample(ipc)
             target = self.position if self.position is not None else target
+            logging.getLogger(__name__).info(
+                "Time-shift seek phases: cache=miss reader=%.3fs target=%.3fs total=%.3fs",
+                reloaded - started, time.monotonic() - reloaded, time.monotonic() - started)
         else:
             await ipc.command("seek", target, "absolute+exact" if precise else "absolute+keyframes")
         self.position = target
