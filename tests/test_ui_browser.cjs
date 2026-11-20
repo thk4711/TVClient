@@ -80,6 +80,8 @@ test('real browser keeps dragging after DOM moves, with mouse and touch', {timeo
         const points = await coordinates(); assert.equal(points.length, 3);
         await evaluate("window.pointerLog=[]; for(const type of ['pointerdown','pointermove','pointerup','pointercancel','lostpointercapture']) document.addEventListener(type,e=>pointerLog.push({type,target:e.target.tagName,id:e.pointerId,x:e.clientX,y:e.clientY}),true)");
         await send('Input.dispatchMouseEvent', {type: 'mousePressed', ...points[0], button: 'left', buttons: 1, clickCount: 1});
+        // Move in steps like a real drag: a single large jump can race pointer capture on slow runners.
+        await send('Input.dispatchMouseEvent', {type: 'mouseMoved', x: points[0].x, y: points[0].y + 6, buttons: 1});
         await send('Input.dispatchMouseEvent', {type: 'mouseMoved', x: points[0].x, y: points[2].y + 10, buttons: 1});
         await settle();
         assert.equal(await evaluate("document.querySelectorAll('#favourites li.dragging').length"), 1, 'Drag was cancelled: ' + JSON.stringify(await evaluate('({points:' + JSON.stringify(points) + ',height:innerHeight,events:pointerLog,drag:!!drag})')));

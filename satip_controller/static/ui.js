@@ -379,6 +379,10 @@ element('favourites').onpointerup = event => endDrag(event);
 element('favourites').onpointercancel = event => endDrag(event, true);
 element('favourites').onlostpointercapture = event => {
     // Ignore capture changes bubbling from a child (e.g. implicit touch capture).
-    if (event.target === element('favourites')) endDrag(event, true);
+    if (event.target !== element('favourites') || !drag || event.pointerId !== drag.pointer) return;
+    // A handoff artifact can drop capture before the first move; re-acquire so the
+    // gesture survives on slow or touch devices instead of cancelling prematurely.
+    if (!drag.moved) { drag.captureTarget.setPointerCapture(drag.pointer); return; }
+    endDrag(event, true);
 };
 controls(); poll();

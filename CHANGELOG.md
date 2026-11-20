@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Favourites drag no longer cancels when pointer capture is briefly lost before
+  the first move, which could drop reordering on slower or touch devices.
+
 ## [0.1.0] - 2026-11-20
 
 Initial public release. The appliance turns a Raspberry Pi 4 into a SAT-IP
