@@ -158,7 +158,7 @@ def validate(target, output, repo, checkout):
     for feature, value in (("SATIP_CLIENT", "1"), ("SATIP_SERVER", "0"), ("IPTV", "1")):
         if not re.search(r"^#define\s+ENABLE_" + feature + r"\s+" + value + r"\b", text, re.M):
             raise ValueError("Incorrect backend SAT-IP client/server feature selection")
-    result = {"schema": 1, "application_version": "0.1.0", "files": hashes,
+    result = {"schema": 1, "application_version": "0.1.1", "files": hashes,
               "python_security_dependencies": dependency_versions,
               "backend_revision": "37453bc3fe5f9e10f3428ebb1abdc613f8b07186",
               "backend_database_qualified": False, "persistent_schema": 1,

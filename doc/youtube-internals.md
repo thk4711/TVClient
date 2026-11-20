@@ -88,5 +88,6 @@ For physical acceptance, pair through the actual phone app and observe picture,
 sound, phone controls, receiver controls and return to TV. Check cold boot,
 network stalls and sustained playback separately. A synthetic Lounge sender and
 advancing decoder counters do not establish app compatibility or audible output.
-The current-source phone/video matrix, QR app handoff, cold boot and endurance
-remain unqualified; see [validation limits](validation.md).
+YouTube reception is tested and working within the documented compatibility
+limits. Record the phone/video matrix, QR app handoff, cold boot and endurance
+results against the exact release image; see [validation limits](validation.md).

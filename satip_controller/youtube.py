@@ -1,4 +1,4 @@
-"""Experimental YouTube TV-code receiver; no LAN listener or Google login.
+"""YouTube TV-code receiver; no LAN listener or Google login.
 
 Lounge is an undocumented protocol, not Google Cast. Network work and video
 resolution run separately; only Controller.tick touches its owned mpv instance.

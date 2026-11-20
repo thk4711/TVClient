@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-21
+
+### Release
+- Prepare the first downloadable Raspberry Pi 4 image distribution with versioned
+  image/source assets, checksums and explicit image qualification limits.
+
 ### Changed
+- Describe all current features as tested and supported within their compatibility
+  limits; remove outdated feature labels from documentation, source messages and
+  the Buildroot YouTube option, and include all features in the image release plan.
 - Add opt-in installation of Debian build-host prerequisites with non-interactive
   privilege checks; dry runs and direct shell builds do not install packages.
 - Compress remote SD images before transfer and collect exactly one image format

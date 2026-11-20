@@ -17,7 +17,7 @@ data-preserving firmware update. See [validation](../doc/validation.md).
   software MPEG-2 SD/BWDIF and exclusive HLS browser preview.
 - Python XML/pyexpat and zlib runtime modules required by discovery and HTTPX.
 - Ethernet DHCP, optional WPA2 Wi-Fi, chrony, and opt-in Dropbear recovery access.
-- SAT-IP client and IPTV inputs for experimental [Enigma2 reception](../doc/enigma2.md);
+- SAT-IP client and IPTV inputs for [Enigma2 reception](../doc/enigma2.md);
   Tvheadend SAT-IP server and descrambling remain disabled.
 - No embedded credentials, SSH identity, private network settings, or channel library.
 

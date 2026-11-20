@@ -56,6 +56,14 @@ LAN discovery, browser bouquet import and separate source lineups.
 - [YouTube reception](doc/youtube.md): pair a phone with a TV code
   and play compatible public videos on HDMI.
 
+## Download image
+
+Download the **[v0.1.1 Raspberry Pi 4 image](https://github.com/thk4711/TVClient/releases/tag/v0.1.1)**
+and its checksum/source assets from GitHub Releases. Use the image ZIP, not GitHub’s
+automatic source-code archive. Flashing replaces the entire selected card, including
+existing receiver settings. See [installation](doc/installation.md) and the
+release notes for verification, compatibility and qualification limits.
+
 ## Getting started
 
 For illustrated, self-service instructions from flashing the SD card to watching TV,
@@ -68,6 +76,8 @@ reception, playback, control and recovery features reliably in that setup. The
 image profile is still a **development image**: there is no automatic firmware
 update mechanism, and a full fresh-card/hardware qualification matrix is not yet
 complete. Deploy it on a trusted LAN. See [validation limits](doc/validation.md).
+The [first image release plan](doc/image-release-plan.md) describes the work required
+to publish a downloadable image and qualify it before adding features.
 
 You need:
 
@@ -79,8 +89,9 @@ You need:
   Wi-Fi-only first boot needs a USB keyboard. See [first boot](doc/buildroot-first-boot-setup.md).
 - A browser on a phone, tablet, or computer for setup and channel management.
 
-1. Write the appliance image to the SD card. See the
-   [image guide](buildroot/README.md) if you need to build an image.
+1. Download the [v0.1.1 image](https://github.com/thk4711/TVClient/releases/tag/v0.1.1),
+   verify its checksums and write it to the SD card. See the
+   [image guide](buildroot/README.md) if you prefer to build an image.
 2. Connect HDMI and power. The image initializes its factory-empty data automatically.
 3. Connect Ethernet, or use a USB keyboard to select Wi-Fi and enter its password
    on HDMI. The welcome screen shows a setup URL and matching QR code.

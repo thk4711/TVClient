@@ -6,9 +6,11 @@ qualification reference, not a chronological deployment record.
 [Documentation index](README.md) · [Development](development.md) · [Validation tools](../validation/README.md)
 
 The appliance has been tested on real Raspberry Pi 4 hardware, where its core
-reception, playback, control and recovery features run reliably. SAT-IP, Enigma2,
-USB time shifting and YouTube are supported within their documented compatibility
-limits. The image profile remains a development profile: a full current-source
+reception, playback, control and recovery features run reliably. All current
+features are tested and working, including SAT-IP, Enigma2, Wi-Fi, physical
+controls, browser playback, USB time shifting and YouTube, within their documented
+compatibility limits. The remaining release work records acceptance of the exact
+distributed image; it is not a designation of these features as unfinished. The image profile remains a development profile: a full current-source
 image build, fresh-card setup and the complete hardware qualification matrix below
 are not yet formalized, and automated tests plus in-place device checks do not by
 themselves constitute a complete physical acceptance sign-off.

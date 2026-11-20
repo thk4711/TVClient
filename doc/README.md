@@ -47,6 +47,7 @@ safety boundaries. Routine operation belongs in the user guides above.
 | [Validation](validation.md) | Current acceptance boundaries and qualification procedure |
 | [First-boot qualification](first-boot-validation.md) · [Time-shift qualification](timeshift-validation.md) · [Backup qualification](backup-validation.md) | Feature-specific acceptance checklists |
 | [Releasing](releasing.md) | Development prerelease checks and licensing |
+| [First image release plan](image-release-plan.md) | Proposed release milestones, qualification gates and GitHub delivery |
 | [Reference hardware](reference-setup.md) | Non-portable example hardware and identities |
 
 The [validation tools index](../validation/README.md) describes reusable test

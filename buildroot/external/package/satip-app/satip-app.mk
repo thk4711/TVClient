@@ -1,4 +1,4 @@
-SATIP_APP_VERSION = 0.1.0
+SATIP_APP_VERSION = 0.1.1
 SATIP_APP_SITE = $(BR2_EXTERNAL_SATIP_PATH)/../..
 SATIP_APP_SITE_METHOD = local
 # Allowlist local builds too: never stage private configuration or deploy examples.

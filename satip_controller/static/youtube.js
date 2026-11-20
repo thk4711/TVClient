@@ -21,7 +21,7 @@
         code.hidden = false; code.textContent = value.match(/.{3}/g).join(' ');
         if (!qr || !canvas || !link || renderedCode === value) return;
         try {
-            // App handoff is experimental; /pair falls back to YouTube help in browsers.
+            // The /pair link opens the app or falls back to YouTube help in browsers.
             const url = 'https://www.youtube.com/pair?code=' + value;
             const matrix = qrcode(0, 'M');
             matrix.addData(url, 'Byte'); matrix.make();

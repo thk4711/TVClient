@@ -1,4 +1,4 @@
-"""Experimental root-only, recoverable Enigma2 import and single-source selection.
+"""Root-only, recoverable Enigma2 import and single-source selection.
 
 Run on the receiver, not on the Enigma2 box. No remote zap or filesystem changes
 on the source. The usual web channel/favourites UI remains the channel manager.
@@ -285,7 +285,7 @@ async def import_channels(backend, receiver, bouquets, channel_names, timeout, s
     previous = validate_profile(read_json(path)) if path.exists() else None
     if previous and any(previous["enigma2"][k] != v for k, v in
                         (("address", receiver.host), ("web_port", receiver.web_port), ("stream_port", receiver.stream_port))):
-        raise ValueError("This experimental importer supports one Enigma2 receiver; retain its identity")
+        raise ValueError("This importer supports one Enigma2 receiver; retain its identity")
     networks = await backend.grid("mpegts/network/grid")
     name = "Enigma2 " + receiver.host
     matching = [n for n in networks if n.get("networkname") == name]

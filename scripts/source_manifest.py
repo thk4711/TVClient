@@ -102,7 +102,7 @@ BUILD_GUIDES = """
     buildroot-services-persistence configuration development device-settings enigma2
     channel-switching enigma2-internals timeshift-internals youtube-internals
     hdmi-startup-screen installation operations provisioning recovery
-    reference-setup releasing security timeshift troubleshooting tvheadend usage validation youtube
+    reference-setup releasing image-release-plan security timeshift troubleshooting tvheadend usage validation youtube
     first-boot-validation timeshift-validation user-manual infrared
 """.split()
 BUILD_FILES = frozenset({

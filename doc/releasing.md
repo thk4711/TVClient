@@ -4,6 +4,10 @@
 
 [Documentation index](README.md) · [Image build guide](../buildroot/README.md) · [Validation](validation.md)
 
+The implementation and qualification work needed for the first downloadable and
+qualified image release is tracked in the [image release plan](image-release-plan.md).
+That plan does not change the current release status or authorize publication.
+
 The current profile produces **development installation images**. Its metadata
 and wrapper deliberately require `release=false`. There is no qualified release
 profile, data-preserving firmware updater, or demonstrated bit-for-bit reproducible
@@ -44,7 +48,7 @@ metadata outside it. For example, on the build host (replace all placeholders):
 
 ~~~sh
 PUBLIC_REPOSITORY=https://github.com/OWNER/REPOSITORY.git
-CANDIDATE_TAG=v0.1.0-dev.1
+CANDIDATE_TAG=v0.1.1
 SOURCE=/home/BUILD_USER/releases/candidate/source
 export BUILDROOT_DIR=/home/BUILD_USER/releases/candidate/buildroot
 export SATIP_OUTPUT_DIR=/home/BUILD_USER/releases/candidate/output
@@ -197,7 +201,14 @@ artifacts, investigating differences. Current input hashes, checked-hash Python
 bytecode and ZIP integrity tests do not establish that property. Document actual
 results rather than inventing requirements or promising reproducibility.
 
-## 6. Publish an explicitly labelled development prerelease
+## 6. Publish the versioned GitHub image release
+
+For `v0.1.1`, publish directly as a normal GitHub release with no draft or
+prerelease. Prepare all assets locally first. Keep the existing development build
+profile and `release=false` metadata truthful; a GitHub release is not by itself
+a claim of complete fresh-image/hardware qualification. All current features
+are tested and working within their compatibility limits. Record outstanding
+exact-image checks in the release notes.
 
 Bind every published artifact to the candidate commit and image digest. Include:
 
@@ -224,8 +235,30 @@ logs, assets or source archives.
 
 Download the image, release checksum manifest and any signature/attestation from
 the same release. Verify the signature/attestation using the release's documented
-identity and tool before relying on the checksum manifest. No signing identity
-has yet been established by this development profile.
+identity and tool before relying on the checksum manifest. The release checksum manifest uses an OpenSSH Ed25519 signature with namespace
+`satip-release`. The trusted public key is committed as
+[`.github/release-signing.pub`](../.github/release-signing.pub); its fingerprint is
+`SHA256:Ysg4PrszTMGx3WXLP1VoIl2Jb9BL357RmeljxtJUsL0`. Obtain it from the reviewed
+source revision through a trusted GitHub connection, not solely from an
+untrusted image mirror. The signing key authenticates release files; it does not
+certify hardware qualification.
+
+With OpenSSH 8.2 or newer, verify before extracting/flashing:
+
+~~~sh
+ssh-keygen -lf release-signing.pub
+# Compare the fingerprint with the trusted value above.
+printf 'tvclient-release %s\n' "$(cat release-signing.pub)" > allowed-signers
+ssh-keygen -Y verify -f allowed-signers -I tvclient-release \
+  -n satip-release -s RELEASE_SHA256SUMS.sig < RELEASE_SHA256SUMS
+# Then check every payload listed in the manifest (all must be downloaded):
+sha256sum -c RELEASE_SHA256SUMS
+# macOS: shasum -a 256 -c RELEASE_SHA256SUMS
+~~~
+
+The manifest covers release payloads, not itself or its detached signature.
+The raw-image manifest is checked after extraction. A missing listed file is
+not a successful full-set checksum verification.
 
 For the helper's existing artifact manifests:
 

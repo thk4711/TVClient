@@ -1,5 +1,5 @@
 config BR2_PACKAGE_PYTHON_SATIP_YT_DLP
-	bool "SAT-IP experimental YouTube resolver"
+	bool "SAT-IP YouTube resolver"
 	depends on BR2_PACKAGE_PYTHON3
 	select BR2_PACKAGE_PYTHON3_ZLIB
 	select BR2_PACKAGE_PYTHON3_PYEXPAT

@@ -89,7 +89,7 @@ Follow these steps in order. Steps 1–3 are the same for both television source
 ### 1. Flash the microSD card
 
 1. Download/install **Raspberry Pi Imager** on your computer, or use another raw SD-image writer. The official download is [Raspberry Pi software](https://www.raspberrypi.com/software/).
-2. Obtain the appliance **sdcard.img** file. If supplied as **sdcard.img.zip**, extract it first. Check the image checksum against the supplied checksum file; the [image guide](../buildroot/README.md#provision-the-flashed-card) explains release/build verification.
+2. Download the appliance image ZIP and checksum files from the [GitHub v0.1.1 release](https://github.com/thk4711/TVClient/releases/tag/v0.1.1), not the source-code archive. Extract the **sdcard.img** file first. Check the image checksum against the supplied checksum file; the [image guide](../buildroot/README.md#provision-the-flashed-card) explains release/build verification.
 3. Insert the microSD card in your computer's card reader. In Imager, choose **Raspberry Pi 4** if asked for a device.
 4. In the operating-system/image choice, select **Use custom** and select **sdcard.img**. Do not choose Raspberry Pi OS.
 5. In the storage choice, select the correct microSD card. Check its capacity and name so you do not select a hard drive or another card.

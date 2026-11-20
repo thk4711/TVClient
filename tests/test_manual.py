@@ -57,7 +57,8 @@ class ManualTests(unittest.TestCase):
                 if link == "/":
                     continue
                 if link.startswith("https://"):
-                    self.assertIn(link, {"https://www.raspberrypi.com/software/", "https://argon40.com/"})
+                    self.assertIn(link, {"https://www.raspberrypi.com/software/", "https://argon40.com/",
+                                         "https://github.com/thk4711/TVClient/releases/tag/v0.1.1"})
                     continue
                 self.assertNotIn("://", link, "Images/styles must be local; external links are optional references")
                 filename, _, anchor = link.partition("#")
@@ -107,6 +108,18 @@ class ManualTests(unittest.TestCase):
         self.assertEqual(manual.count("| Pause / resume |"), 1)
         settings = (ROOT / "satip_controller/static/index.html").read_text()
         self.assertNotIn("Experimental", settings)
+
+    def test_current_features_have_no_experimental_labels(self):
+        paths = [ROOT / "README.md", ROOT / "buildroot/README.md",
+                 ROOT / "buildroot/external/package/python-satip-yt-dlp/Config.in",
+                 ROOT / "satip_appliance/tv_source.py",
+                 ROOT / "satip_controller/youtube.py",
+                 ROOT / "satip_controller/static/youtube.js",
+                 *(ROOT / "doc").glob("*.md"),
+                 *(ROOT / "doc").glob("*.html")]
+        for path in paths:
+            with self.subTest(path=path.relative_to(ROOT)):
+                self.assertNotIn("experimental", path.read_text().lower())
 
     def test_ir_wiring_matches_firmware_and_warns_about_pinout(self):
         manual = (ROOT / "doc/user-manual.md").read_text()

@@ -24,7 +24,9 @@ are not. See the [appliance overview](../README.md#supported-tv-and-viewing-mode
 
 ## Obtain and write the image
 
-Use the project's appliance image, not Raspberry Pi OS. If supplied zipped,
+Download the image ZIP and checksum assets from the
+[GitHub v0.1.1 release](https://github.com/thk4711/TVClient/releases/tag/v0.1.1).
+Use the appliance image, not Raspberry Pi OS or GitHub’s source-code archive. If supplied zipped,
 extract **sdcard.img** first. In Raspberry Pi Imager choose **Use custom**, select
 the image and correct card, then write and verify it. Do not use Imager's OS
 customisation. See the [illustrated flashing steps](user-manual.md#1-flash-the-microsd-card).
