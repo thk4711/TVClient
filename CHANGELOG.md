@@ -10,8 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.1] - 2026-11-21
 
 ### Release
-- Prepare the first downloadable Raspberry Pi 4 image distribution with versioned
-  image/source assets, checksums and explicit image qualification limits.
+- Publish the first downloadable Raspberry Pi 4 image distribution as the normal
+  GitHub v0.1.1 release, with versioned image/source assets, signed checksums,
+  offline manual, build evidence and explicit image qualification limits.
 
 ### Changed
 - Describe all current features as tested and supported within their compatibility

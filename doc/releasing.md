@@ -13,6 +13,16 @@ and wrapper deliberately require `release=false`. There is no qualified release
 profile, data-preserving firmware updater, or demonstrated bit-for-bit reproducible
 build. Publishing source or passing CI does not change those boundaries.
 
+## Published image
+
+The [v0.1.1 GitHub release](https://github.com/thk4711/TVClient/releases/tag/v0.1.1)
+is published as a normal release, not a draft or prerelease. Its 18 assets include
+the image ZIP, signed checksums, offline manual, build evidence and corresponding
+project/Buildroot/third-party/toolchain sources. The source tag identifies commit
+`1e94c75d3cbe761064cd7bfdf96ca44f04eb3446`; publication does not change the image
+qualification boundaries described above. Recipient instructions are also supplied
+as `VERIFY.md`, and release-specific capabilities/limitations are in the notes.
+
 ## 1. Select the candidate and builder
 
 Review and commit the intended public source before selecting a candidate revision.
