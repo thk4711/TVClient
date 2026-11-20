@@ -1,0 +1,10 @@
+{
+  "revision": "37453bc3fe5f9e10f3428ebb1abdc613f8b07186",
+  "patch_sha256": "342c885a820dab8ec345969a88c1974390ad5b48a2b8d03fe79287ece221d42b",
+  "files": {
+    "src/input/mpegts.h": "b6ae51905de4b03f8b8d01a82aa145ba4ad2f91a4254707605d9898b4f8e26db",
+    "src/input/mpegts/mpegts_input.c": "9145b6051aec6d11af787469ccaeaf197fe57d1f0e1c06edde773ccf6b4d7679",
+    "src/input/mpegts/mpegts_mux.c": "47f861001312a9ccc738c8d0a2296d22278192eb8e03cbbd2eacf90fe2a1052a",
+    "src/input/mpegts/satip/satip_frontend.c": "514478abcaf0a617f8b34c8eb249a94c44238526ba51c6af8b62a673790a5b95"
+  }
+}

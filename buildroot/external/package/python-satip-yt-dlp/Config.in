@@ -1,0 +1,8 @@
+config BR2_PACKAGE_PYTHON_SATIP_YT_DLP
+	bool "SAT-IP experimental YouTube resolver"
+	depends on BR2_PACKAGE_PYTHON3
+	select BR2_PACKAGE_PYTHON3_ZLIB
+	select BR2_PACKAGE_PYTHON3_PYEXPAT
+	help
+	  Pinned yt-dlp for the opt-in TV-code receiver. Public H.264/AAC
+	  streams only; JavaScript runtime-dependent videos are not qualified.

@@ -1,0 +1,24 @@
+#!/bin/sh
+export PYTHONPATH=/opt/satip
+case "$1" in
+    start)
+        umask 077
+        rm -f /run/satip-data-ready /run/satip-data-failed
+        rm -f /run/satip-boot-error
+        printf '%s\n' data-mount > /run/satip-boot-stage
+        mkdir -p /data
+        # No formatting, expansion, guessed device numbers or root-slot fallback.
+        if ! mountpoint -q /data && ! mount -t ext4 -o rw LABEL=satip-data /data; then
+            printf '%s\n' data-mount > /run/satip-boot-error
+            touch /run/satip-data-failed
+            exit 1
+        fi
+        /usr/bin/python3 -m satip_appliance.provision || {
+            [ -s /run/satip-boot-error ] || printf '%s\n' data-prepare > /run/satip-boot-error
+            touch /run/satip-data-failed
+            exit 1
+        }
+        ;;
+    stop) rm -f /run/satip-data-ready ;;
+    *) echo "Usage: $0 {start|stop}" >&2; exit 1 ;;
+esac

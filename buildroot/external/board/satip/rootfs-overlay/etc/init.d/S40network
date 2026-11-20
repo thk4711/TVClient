@@ -1,0 +1,67 @@
+#!/bin/sh
+# Do not wait for DHCP or Wi-Fi association in the init chain. One DHCP client
+# per interface; both links may be used for development recovery.
+export PYTHONPATH=/opt/satip
+start_wifi() {
+    [ -f /run/satip-dev-ready ] && [ -f /etc/wpa_supplicant.conf ] || return 0
+    [ ! -f /etc/init.d/S39satip-device ] || [ -f /run/satip-device-ready ] || return 1
+    [ "$(cat /etc/satip-wifi-enabled 2>/dev/null)" != no ] || return 0
+    # Observer exits after DHCP confirmation or 90 seconds. It can request a
+    # normal scan if the hinted scan leaves the supplicant idle; DHCP is independent.
+    if ! start-stop-daemon -K -t -p /run/satip-wifi-startup.pid \
+            -x /usr/bin/python3 >/dev/null 2>&1; then
+        start-stop-daemon -S -b -m -p /run/satip-wifi-startup.pid \
+            -x /usr/bin/python3 -- -m satip_appliance.wifi_startup || true
+    fi
+    ifconfig wlan0 up || return 1
+    if ! start-stop-daemon -K -t -p /run/satip-wpa.pid \
+            -x /usr/sbin/wpa_supplicant >/dev/null 2>&1; then
+        config=$(/usr/bin/python3 -m satip_appliance.wifi_scan prepare) || config=/etc/wpa_supplicant.conf
+        [ "$config" = /run/satip-network/wpa-startup.conf ] || config=/etc/wpa_supplicant.conf
+        # initial_freq_list affects only the first scan. Disabled frequencies
+        # are filtered out; the observer also recovers an idle failed scan.
+        if ! wpa_supplicant -B -P /run/satip-wpa.pid -i wlan0 -c "$config"; then
+            [ "$config" != /etc/wpa_supplicant.conf ] || return 1
+            wpa_supplicant -B -P /run/satip-wpa.pid -i wlan0 \
+                -c /etc/wpa_supplicant.conf || return 1
+        fi
+    fi
+    start_dhcp wlan0
+}
+stop_wifi() {
+    start-stop-daemon -K -p /run/satip-wifi-startup.pid -x /usr/bin/python3 || true
+    start-stop-daemon -K -p /run/satip-dhcp-wlan0.pid -x /sbin/udhcpc || \
+        start-stop-daemon -K -p /run/satip-dhcp-wlan0.pid -x /usr/bin/python3 || true
+    start-stop-daemon -K -p /run/satip-wpa.pid -x /usr/sbin/wpa_supplicant || true
+    sleep 1
+    ifconfig wlan0 down || return 1
+    ip -4 addr flush dev wlan0
+    ip -4 route flush dev wlan0
+}
+start_dhcp() {
+    # The Python launcher execs udhcpc. Match the PID, not its original executable.
+    if start-stop-daemon -K -t -p /run/satip-dhcp-$1.pid -x /sbin/udhcpc >/dev/null 2>&1 ||
+       start-stop-daemon -K -t -p /run/satip-dhcp-$1.pid -x /usr/bin/python3 >/dev/null 2>&1; then
+        return 0
+    fi
+    start-stop-daemon -S -b -m -p /run/satip-dhcp-$1.pid \
+        -x /usr/bin/python3 -- -m satip_appliance.network start "$1"
+}
+case "$1" in
+    start)
+        ifconfig lo 127.0.0.1 up
+        ifconfig eth0 up || exit 1
+        start_dhcp eth0
+        start_wifi
+        ;;
+    stop)
+        start-stop-daemon -K -p /run/satip-wifi-startup.pid -x /usr/bin/python3 || true
+        for interface in eth0 wlan0; do
+            start-stop-daemon -K -p /run/satip-dhcp-$interface.pid -x /sbin/udhcpc ||
+                start-stop-daemon -K -p /run/satip-dhcp-$interface.pid -x /usr/bin/python3 || true
+        done
+        start-stop-daemon -K -p /run/satip-wpa.pid -x /usr/sbin/wpa_supplicant || true
+        ;;
+    restart-wifi) stop_wifi && start_wifi ;;
+    *) echo "Usage: $0 {start|stop|restart-wifi}" >&2; exit 1 ;;
+esac

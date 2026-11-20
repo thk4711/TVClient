@@ -1,0 +1,12 @@
+#!/bin/sh
+# Nach mount -a, vor rcS. Beide Prozesse warten unabhängig vom Startablauf.
+umask 077
+[ -f /run/satip-splash/finished ] && exit 0
+# Let rcS/udev satisfy VC4 dependencies while EDID preparation waits for KMS.
+(
+    /usr/sbin/satip-hdmi-prepare || :
+    exec /usr/bin/satip-splash
+) </dev/null >/dev/null 2>/run/satip-splash.log &
+PYTHONPATH=/opt/satip /usr/bin/python3 -m satip_appliance.splash \
+    </dev/null >/dev/null 2>/run/satip-splash-monitor.log &
+exit 0

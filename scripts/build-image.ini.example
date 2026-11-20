@@ -1,0 +1,14 @@
+# Copy to scripts/build-image.ini (ignored by Git), then adjust for your host.
+# CLI values override these settings. No passwords or provisioning secrets.
+[build_image]
+execution = remote
+host = build-user@build-host
+ssh_port = 22
+remote_root = /home/build-user/embedded/satip
+jobs = 16
+zip_image = true
+# Defaults derive from remote_root; remote paths must be absolute/normalized.
+# buildroot_dir = /home/build-user/embedded/satip/buildroot
+# output_dir = /home/build-user/embedded/satip/output/rpi4-64
+# download_cache = /home/build-user/embedded/dl
+# artifacts_dir = /absolute/local/path/to/artifacts

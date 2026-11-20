@@ -1,0 +1,12 @@
+#!/bin/sh
+# Start after data/network recovery access, before TV services. Stop after them.
+export PYTHONPATH=/opt/satip
+case "$1" in
+    start)
+        [ -e /dev/watchdog0 ] || { echo "Hardware watchdog unavailable" >&2; exit 1; }
+        /usr/bin/python3 -m satip_appliance.watchdog start
+        ;;
+    stop) /usr/bin/python3 -m satip_appliance.watchdog stop ;;
+    restart) "$0" stop && "$0" start ;;
+    *) echo "Usage: $0 {start|stop|restart}" >&2; exit 1 ;;
+esac

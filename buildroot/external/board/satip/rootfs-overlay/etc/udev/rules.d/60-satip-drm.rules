@@ -1,0 +1,3 @@
+# Preserve actual device path identity; never manufacture remembered card numbers.
+SUBSYSTEM=="drm", KERNEL=="card[0-9]*", IMPORT{builtin}="path_id"
+SUBSYSTEM=="drm", KERNEL=="card[0-9]*", ENV{ID_PATH}=="?*", SYMLINK+="dri/by-path/$env{ID_PATH}-card"

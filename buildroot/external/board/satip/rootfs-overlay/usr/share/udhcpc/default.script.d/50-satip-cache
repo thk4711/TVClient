@@ -1,0 +1,4 @@
+#!/bin/sh
+# Save the address hint only after the stock script has handled the DHCP event.
+export PYTHONPATH=/opt/satip
+exec python3 -m satip_appliance.network cache "$interface" "$1"

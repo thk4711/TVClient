@@ -1,0 +1,27 @@
+name: Bug report
+description: Report a reproducible appliance or build problem
+body:
+  - type: markdown
+    attributes:
+      value: "For vulnerabilities, follow SECURITY.md instead. Do not attach credentials, device exports, raw logs or private screenshots."
+  - type: textarea
+    id: identity
+    attributes:
+      label: Source and image identity
+      description: Commit/version, image checksum, and whether this is a fresh image or in-place update.
+    validations:
+      required: true
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware and environment
+      description: Pi model, HDMI/audio connection, input hardware, SAT-IP model, Ethernet/Wi-Fi, or build host. Omit private addresses and names.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps, expected behavior and actual behavior
+      description: Include a minimal reproduction and sanitized errors. State any tests already performed.
+    validations:
+      required: true

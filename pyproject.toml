@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "satip-controller"
+version = "0.1.0"
+description = "Direct-KMS SAT-IP television controller and standalone management UI"
+readme = "README.md"
+license = "MIT AND Apache-2.0"
+license-files = ["LICENSE", "satip_controller/static/hls-LICENSE.txt", "satip_controller/static/qrcode-LICENSE.txt"]
+requires-python = ">=3.13"
+authors = [{ name = "thk4711", email = "thk4711@gmail.com" }]
+keywords = ["sat-ip", "dvb", "raspberry-pi", "television", "buildroot", "enigma2"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Video",
+]
+dependencies = ["evdev>=1.9; sys_platform == 'linux'", "zeroconf==0.148.0; sys_platform == 'linux'", "fastapi>=0.115", "uvicorn>=0.32", "httpx>=0.28"]
+
+[project.urls]
+Homepage = "https://github.com/thk4711/TVClient"
+Repository = "https://github.com/thk4711/TVClient"
+Issues = "https://github.com/thk4711/TVClient/issues"
+Changelog = "https://github.com/thk4711/TVClient/blob/main/CHANGELOG.md"
+
+[project.scripts]
+satip-player = "satip_controller.__main__:main"
+satip-web = "satip_controller.web:main"
+
+[project.optional-dependencies]
+dev = ["build>=1.2", "ruff>=0.11", "mypy>=1.15"]
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+include = ["satip_controller", "satip_appliance"]
+namespaces = false
+
+[tool.setuptools.package-data]
+satip_controller = ["static/*.html", "static/*.js", "static/*.css", "static/*.txt"]
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.mypy]
+files = ["satip_controller/lifecycle.py", "satip_controller/coordination.py"]
+check_untyped_defs = true
+follow_imports = "skip"
+ignore_missing_imports = true

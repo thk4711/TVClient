@@ -1,0 +1,22 @@
+# Generated from confirmed Apple A1294 captures; observed remote ID only.
+# Legacy ignore_mask expanded into native NEC32 entries.
+# Common Select/Play trailer is intentionally unmapped.
+[[protocols]]
+name = "apple-a1294-satip"
+protocol = "nec"
+variant = "nec32"
+[protocols.scancodes]
+0x87eeaa02 = "KEY_INFO"
+0x87eeaa03 = "KEY_INFO"
+0x87eeaa06 = "KEY_VOLUMEUP"
+0x87eeaa07 = "KEY_VOLUMEUP"
+0x87eeaa08 = "KEY_VOLUMEDOWN"
+0x87eeaa09 = "KEY_VOLUMEDOWN"
+0x87eeaa0a = "KEY_CHANNELUP"
+0x87eeaa0b = "KEY_CHANNELUP"
+0x87eeaa0c = "KEY_CHANNELDOWN"
+0x87eeaa0d = "KEY_CHANNELDOWN"
+0x87eeaa5c = "KEY_MUTE"
+0x87eeaa5d = "KEY_MUTE"
+0x87eeaa5e = "KEY_PLAYPAUSE"
+0x87eeaa5f = "KEY_PLAYPAUSE"

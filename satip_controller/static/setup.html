@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SAT-IP · First setup</title>
+<link rel="stylesheet" href="/app.css">
+<body class="setup-page"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">◉</span><span>SAT-IP<small>TELEVISION RECEIVER</small></span></a>
+<p class="eyebrow">WELCOME TO YOUR RECEIVER</p>
+<h1>SAT-IP first setup</h1>
+<p>Welcome! Follow these steps to start watching TV. No password is needed on your home network.</p>
+<p><a class="text-link" href="/user-manual.html" target="_blank" rel="noopener">User manual — illustrated setup and operating instructions ↗</a></p>
+<h2>Your receiver and controls</h2>
+<div class="setup-field"><label for="receiver-name">Receiver name</label><input id="receiver-name" maxlength="63" value="satip-dev"></div>
+<div class="setup-field"><label for="receiver-timezone">Timezone</label><select id="receiver-timezone"></select></div>
+<button id="save-preferences">Save receiver settings</button><p id="preferences-status" role="status"></p>
+<p>Infrared and USB keyboards are always enabled together. Press an arrow or OK button on either to test it.</p>
+<div class="setup-field"><label for="input-device">Connected controls</label><select id="input-device"></select></div>
+<button id="save-input">Use this control</button>
+<p id="input-status" role="status">USB keyboards work automatically. For an additional USB remote, select it and choose Use this control.</p>
+<p id="input-test" role="status"></p>
+<section id="setup-search"><section id="setup-source-browser"><h2>TV source discovery</h2>
+<label for="source-kind">Source type</label><select id="source-kind"><option value="satip">SAT-IP server</option><option value="enigma2">Enigma2 receiver</option></select>
+<button id="source-discover" type="button">Search local network</button><p id="source-discovery-status" role="status"></p>
+<label for="source-server">Discovered server</label><select id="source-server"></select>
+<div id="source-enigma" hidden><p class="hint">OpenWebif HTTP access on a private LAN is required. Authentication and HTTPS are not supported. Discovery checks port 80; enter other ports manually. No zap or settings commands are sent.</p>
+<label for="source-address">Receiver IPv4 address</label><input id="source-address" maxlength="15" placeholder="192.168.1.10">
+<label for="source-web-port">OpenWebif port</label><input id="source-web-port" type="number" min="1" max="65535" value="80">
+<label for="source-stream-port">Raw stream port</label><input id="source-stream-port" type="number" min="1" max="65535" value="8001">
+<button id="source-load-bouquets" type="button">Load TV bouquets</button></div>
+<p id="source-message" role="alert"></p><section id="source-bouquet-panel" hidden><h2>Import Enigma2 bouquets</h2>
+<p>Select up to 16 genuinely free-to-air TV bouquets. Overlapping service references are deduplicated. Import replaces the available Enigma2 catalogue with validated channels from this selection; matching favourites keep their order. Unsupported and unavailable streams are excluded. An unsuccessful or stopped import retains the previous lineup.</p>
+<p class="hint">Enter or discover the receiver above and load its bouquets. Validation may take many minutes.</p>
+<div id="source-bouquets"></div><div class="actions"><button id="source-import" type="button">Import selected bouquets</button><button id="source-cancel" type="button" hidden>Stop import</button><button id="source-recover" type="button" hidden>Restore TV playback</button></div>
+<progress id="source-progress" aria-label="Bouquet import progress" hidden></progress><p id="source-import-status" role="status" aria-live="polite"></p></section></section>
+<div id="setup-satip"><h2>1. SAT-IP server</h2>
+<button id="discover">Search again</button>
+<p id="discovery-status" role="status"></p>
+<div class="setup-field" id="server-field"><label for="server">Server</label><select id="server"></select></div>
+<p id="server-fixed" hidden></p>
+<button id="retry-server" hidden>Retry connection</button>
+<details id="manual-server"><summary>Add server by description URL</summary>
+<p>If multicast discovery finds no server, enter its SAT-IP XML description URL.
+Supported HTTP ports: 80, 8080 and 38400.</p>
+<div class="setup-field"><label for="server-url">Description URL</label><input id="server-url" type="url" maxlength="512" placeholder="http://192.168.1.10:38400/description.xml"></div>
+<button id="add-server">Add server</button></details>
+<p id="registration-status" role="status"></p>
+<h2>2. Select a tuner and search channels</h2>
+<div class="setup-field"><label for="tuner">Tuner</label><select id="tuner"></select></div>
+<p id="tuner-hint">Choose the tuner to use for the next search.</p>
+<p>Satellite: <strong>Astra 19.2°E</strong>. The transponder list is selected automatically.</p>
+<div class="actions"><button id="scan" class="primary">Scan</button><button id="cancel" hidden>Stop search</button><button id="recover" hidden>Restore tuner settings</button></div>
+<progress id="scan-progress" aria-label="Channel search progress" hidden></progress>
+<p id="status" role="status"></p>
+<p id="scan-detail"></p>
+</div></section>
+<p id="message" role="alert"></p>
+<section id="setup-selection">
+<p>A complete channel search can take more than ten minutes. You can stop the search and keep channels already found.</p>
+<h2 id="selection-heading" tabindex="-1">Choose your favourites</h2><p>A starter selection is checked automatically, preferring HD where available. Choose your channels. Once the search finishes or you stop it, confirm your selection to arrange them.</p>
+<div id="channels"></div><button id="confirm-favourites" class="primary">Confirm favourites</button>
+</section>
+<section id="setup-sorting" hidden>
+<h2 id="sorting-heading" tabindex="-1">Arrange your favourites</h2>
+<p>Drag and drop your favourites into the order you want. With a keyboard, focus a drag handle and use the Up and Down keys.</p>
+<ol id="setup-favourites" class="channel-list" aria-label="Favourite channel order"></ol>
+<p id="sort-status" role="status"></p>
+<div class="actions"><button id="change-selection">Change selection</button><button id="finish" class="primary">Save channels and watch TV</button></div>
+</section>
+<details><summary>Advanced: boot preferences</summary>
+<p>Optional settings from the SD card are imported and the boot file is cleaned up automatically. You can retry cleanup here if needed.</p>
+<button id="restore-config">Restore default satip-config.txt</button>
+<p id="restore-config-status" role="status"></p>
+<p>Restoring the file is not secure erasure of flash storage.</p></details>
+<script src="/request.js"></script>
+<script src="/setup.js"></script><script src="/sources.js"></script></body></html>

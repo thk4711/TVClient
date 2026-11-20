@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "listen_host": "0.0.0.0",
+  "listen_port": 8080,
+  "allowed_hosts": [
+    "localhost",
+    "127.0.0.1",
+    "receiver.local"
+  ],
+  "require_auth": true,
+  "library": "/var/lib/satip-management/library.json",
+  "management_dir": "/var/lib/satip-management",
+  "player_state_dir": "/var/lib/satip-player",
+  "private_dir": "/var/lib/satip-web",
+  "admin_credentials": "/etc/satip-web/tvheadend-admin.json",
+  "web_credentials": "/etc/satip-web/login.json",
+  "preview_credentials": "/etc/satip-web/preview-credentials.json",
+  "preview_runtime_dir": "/run/satip-web",
+  "network_uuid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "playback_acl_uuid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "mux_timeout": 90
+}

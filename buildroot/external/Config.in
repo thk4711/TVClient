@@ -1,0 +1,3 @@
+source "$BR2_EXTERNAL_SATIP_PATH/package/satip-app/Config.in"
+source "$BR2_EXTERNAL_SATIP_PATH/package/python-satip-yt-dlp/Config.in"
+source "$BR2_EXTERNAL_SATIP_PATH/package/satip-splash/Config.in"

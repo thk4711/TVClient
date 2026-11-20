@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "library": "/var/lib/satip-management/library.json",
+  "credentials": "/etc/satip-player/credentials.json",
+  "state_dir": "/var/lib/satip-player",
+  "management_dir": "/var/lib/satip-management",
+  "runtime_dir": "/run/satip-player",
+  "drm_device": "/dev/dri/by-path/platform-gpu-card",
+  "drm_connector": "HDMI-A-2",
+  "drm_mode": "1920x1080@50",
+  "audio_device": "alsa/hdmi:CARD=vc4hdmi1,DEV=0",
+  "keyboard_vendor": 1241,
+  "keyboard_product": 6,
+  "grab": true,
+  "osd_ms": 3000,
+  "repeat_delay": 0.5,
+  "repeat_interval": 0.125,
+  "debounce": 0.08,
+  "load_timeout": 20,
+  "stall_timeout": 10
+}

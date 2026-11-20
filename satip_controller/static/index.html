@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark"><title>SAT-IP · Receiver</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/request.js"></script>
+<script src="/hls.min.js" defer></script><script src="/ui.js" defer></script><script src="/app.js" defer></script>
+<script src="/qrcode.js" defer></script><script src="/youtube.js" defer></script>
+<script src="/device.js" defer></script><script src="/sources.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<aside class="sidebar">
+<a class="brand" href="#status"><span class="brand-mark" aria-hidden="true">◉</span><span>SAT-IP<small>TELEVISION RECEIVER</small></span></a>
+<nav aria-label="Main navigation">
+<a href="#status" data-page="status"><span aria-hidden="true">▦</span> Status</a>
+<a href="#live" data-page="live"><span aria-hidden="true">▷</span> Live TV</a>
+<a href="#channels" data-page="channels"><span aria-hidden="true">☷</span> Channels</a>
+<a href="#scan" data-page="scan"><span aria-hidden="true">⌕</span> Channel search</a>
+<a href="#settings" data-page="settings"><span aria-hidden="true">⚙</span> Settings</a>
+</nav>
+<a class="text-link" href="/user-manual.html" target="_blank" rel="noopener">User manual ↗</a>
+<div class="sidebar-footer"><span class="status-dot" aria-hidden="true"></span><span id="connection-state">Connecting…</span><small id="receiver-name">Your receiver</small></div>
+</aside>
+<div class="workspace">
+<header class="topbar"><p id="tv-status" role="status">Checking TV playback…</p><div id="stream-indicator" hidden><a href="#live">Live TV active</a><button id="header-stop" class="small">Stop streaming</button></div></header>
+<main id="main" tabindex="-1">
+<div id="message" role="status" aria-live="polite"></div>
+<section class="page" id="page-status" aria-labelledby="status-title">
+<div class="page-heading"><div><h1 id="status-title">Status</h1><p class="subtitle">Playback, reception and system health.</p></div><span class="badge" id="telemetry-updated">Waiting for measurements</span></div>
+<div class="summary-grid">
+<article class="card metric"><span class="label">Receiver activity</span><strong id="activity-value">Connecting…</strong><span id="activity-detail" class="hint">Checking services</span></article>
+<article class="card metric"><span class="label">CPU temperature</span><strong id="temperature-value">—</strong><span id="cpu-value" class="hint">Waiting for a sample</span></article>
+<article class="card metric"><span class="label">Uptime</span><strong id="uptime-value">—</strong><span id="model-value" class="hint">Receiver hardware</span></article>
+</div>
+<article class="card performance-card" aria-labelledby="performance-title">
+<div class="card-heading"><h2 id="performance-title">Performance</h2><span class="badge" id="performance-state">Checking</span></div>
+<p class="hint">CPU, memory, network and disk history, plus the busiest processes.</p>
+<button type="button" id="open-performance" aria-haspopup="dialog" aria-controls="performance-dialog">Open performance monitor</button>
+</article>
+<dialog id="performance-dialog" aria-labelledby="performance-dialog-title" aria-describedby="performance-description">
+<div class="performance-dialog-heading"><h2 id="performance-dialog-title">Performance monitor</h2><button type="button" id="close-performance" autofocus>Close</button></div>
+<p><span class="badge" id="performance-dialog-state">Checking</span></p>
+<p id="performance-description" class="hint">Five-second samples · up to five minutes of history in this browser · gaps mean no fresh sample</p>
+<div id="performance-content" class="performance-grid"></div>
+<h3>Top processes</h3><p class="hint">Sorted by CPU, then RAM. Process CPU: 100% = one fully busy core (up to 400% on Pi 4). RAM is resident memory; shared pages may be counted by multiple processes.</p>
+<div class="process-scroll"><table class="process-table"><thead><tr><th scope="col">PID</th><th scope="col">Process</th><th scope="col">CPU</th><th scope="col">RAM</th></tr></thead><tbody id="performance-processes"></tbody></table></div>
+<p id="performance-note" class="hint"></p>
+</dialog>
+<div class="dashboard-grid">
+<article class="card"><div class="card-heading"><h2>Satellite reception</h2><span class="badge" id="reception-state">Checking</span></div><div id="reception-content" class="empty">Waiting for tuner measurements…</div><p class="hint">Measurements describe the active tuner. Relative quality is reported by your SAT-IP server.</p></article>
+<article class="card"><div class="card-heading"><h2>System</h2><span class="badge" id="system-state">Checking</span></div><dl id="system-content" class="facts"></dl></article>
+<article class="card"><div class="card-heading"><h2>Network</h2><span class="badge" id="network-state">Checking</span></div><div id="network-content" class="empty">Waiting for network information…</div></article>
+<article class="card"><div class="card-heading"><h2>Recent activity</h2><span class="hint">This browser session</span></div><ul id="activity-log" class="activity-list"><li>Waiting for receiver activity…</li></ul><p id="last-search" class="hint"></p></article>
+</div>
+</section>
+<section class="page" id="page-live" aria-labelledby="live-title" hidden>
+<div class="page-heading"><div><h1 id="live-title">Live TV</h1></div></div>
+<div class="watch-grid">
+<article class="card player-card" id="preview-section">
+<div class="video-stage"><div id="video-placeholder"><p>Choose a saved channel to start watching.</p></div><video id="preview-video" controls playsinline hidden></video></div>
+<div class="player-controls"><button id="stop-preview" disabled>Stop streaming and resume TV</button></div>
+<div class="player-info"><h2 id="watch-channel-name"></h2><p id="preview-status" role="status" aria-live="polite"></p><div id="watch-programmes" class="programmes"></div><p class="hint">Press any button on the receiver’s remote or keyboard to return to TV.</p></div>
+</article>
+<article class="card watch-list"><h2>Choose a channel</h2><label class="sr-only" for="watch-search">Find a saved channel</label><input id="watch-search" type="search" placeholder="Find a channel…"><ul id="watch-channels"></ul><p id="watch-empty" class="hint" hidden>No saved channels match. Add and save favourites on the Channels page.</p></article>
+</div>
+</section>
+<section class="page" id="page-channels" aria-labelledby="channels-title" hidden>
+<section id="source-bouquet-panel" hidden><h2>Import Enigma2 bouquets</h2>
+<p>Select up to 16 genuinely free-to-air TV bouquets. Overlapping service references are deduplicated. Import replaces the available Enigma2 catalogue with validated channels from this selection; matching favourites keep their order. Unsupported and unavailable streams are excluded. An unsuccessful or stopped import retains the previous lineup.</p>
+<p class="hint">Choose a receiver and load its bouquets in Settings. Validation may take many minutes and temporarily pauses Pi TV playback.</p>
+<div id="source-bouquets"></div><div class="actions"><button id="source-import" type="button">Import selected bouquets</button><button id="source-cancel" type="button" hidden>Stop import</button><button id="source-recover" type="button" hidden>Restore TV playback</button></div>
+<progress id="source-progress" aria-label="Bouquet import progress" hidden></progress><p id="source-import-status" role="status" aria-live="polite"></p></section>
+<div class="page-heading"><div><p class="eyebrow">MAKE IT YOURS</p><h1 id="channels-title">Channels</h1><p class="subtitle">Choose your favourites and put them in the perfect order.</p></div><button id="refresh-channels">Reload saved channels</button></div>
+<article class="card" id="device-channel-backup" hidden><h2>Channel backup</h2>
+<p class="hint">Save available channels and saved favourites, including their order. Restore replaces only channels; device settings and passwords stay unchanged. TV briefly pauses. Use backups from this receiver's current channel network.</p>
+<div class="actions"><button id="device-channels-download" type="button" class="primary" disabled>Download channel backup</button><button id="device-channels-restore" type="button" disabled>Restore channel backup</button></div>
+<input id="device-channels-file" type="file" accept=".tar,application/octet-stream,application/x-tar" hidden>
+<p id="device-channels-message" role="status" aria-live="polite"></p></article>
+<div class="columns">
+<article class="card"><div class="card-heading"><h2>Available channels</h2><span id="channel-count" class="badge"></span></div><label class="sr-only" for="search">Filter channels</label><input id="search" type="search" placeholder="Filter channels…"><ul id="available" class="channel-list"></ul><p id="empty-channels" class="hint" hidden></p><details><summary>About available channels</summary><p class="hint">Search discovers supported free-to-air SD/HD channels with German main MP2 audio. Save a channel as a favourite before watching it for the first time. Reload fetches known channels without tuning.</p></details></article>
+<article class="card favourites-card"><div class="card-heading"><h2>Your favourites</h2><span class="hint">Your TV lineup</span></div><p class="hint">Drag to reorder, or use the arrow buttons.</p><ol id="favourites" class="channel-list"></ol><div class="save-bar"><p id="unsaved" hidden>You have unsaved changes.</p><button class="primary" id="save-favourites">Save favourites</button>
+<button id="reload-favourites" hidden>Reload saved favourites</button><p id="save-status" class="hint" role="status" aria-live="polite"></p></div></article>
+</div>
+</section>
+<section class="page" id="page-scan" aria-labelledby="scan-title" hidden>
+<div class="page-heading"><div><p class="eyebrow">DISCOVER SOMETHING NEW</p><h1 id="scan-title">Channel search</h1><p class="subtitle">Find supported channels on Astra.</p></div></div>
+<article class="card scan-card"><h2>Search the TV source</h2><p>For Enigma2, this rechecks already imported streams; select and import bouquets on the Channels page. TV playback pauses during a search and resumes when it finishes or you stop it. A full search can take several minutes.</p><label class="option"><input id="short" type="checkbox"><span>Quick search<small>Only search currently enabled transponders.</small></span></label><details><summary>What is a transponder?</summary><p class="hint">A transponder carries a group of channels on one satellite frequency. Leave Quick search unchecked to search all configured Astra frequencies.</p></details><div class="actions"><button class="primary" id="start-scan">Search for channels</button><button id="cancel-scan" disabled>Stop search</button><button id="recover-scan" hidden>Restore TV playback</button></div><div class="scan-progress-panel"><div id="scan-status" role="status" aria-live="polite">Checking search status…</div><progress id="scan-progress" aria-label="Channel search progress" hidden></progress><p id="scan-detail" class="hint"></p></div><p id="recovery-help" hidden>The previous search could not restore the tuner settings. Select “Restore TV playback” to try again.</p><a class="text-link" href="#channels">View discovered channels →</a></article>
+</section>
+<section class="page" id="page-settings" aria-labelledby="settings-title" hidden>
+<div class="page-heading"><div><h1 id="settings-title">Settings</h1></div></div>
+<div id="device-settings" hidden>
+<article class="card"><h2>Device</h2>
+<form id="device-form">
+<label for="device-hostname">Hostname</label><input id="device-hostname" maxlength="63" pattern="[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?" required>
+<label for="device-timezone">Timezone</label><select id="device-timezone" required></select>
+<button class="primary">Save device settings</button>
+<p id="device-message" role="status" aria-live="polite"></p>
+</form></article>
+<article class="card" id="device-source-card" hidden><h2>TV source</h2>
+<h3>Current TV source</h3><p id="source-active" role="status" aria-live="polite"></p>
+<p id="source-current-device"></p><p id="source-current-tuner"></p><p id="source-receiving" role="status"></p>
+<h3>Configure a source</h3>
+<label for="source-kind">Source type</label><select id="source-kind"><option value="satip">SAT-IP server</option><option value="enigma2">Enigma2 receiver</option></select>
+<div id="source-discovery-controls" hidden>
+<button id="source-discover" type="button">Find Enigma2 receivers</button><p id="source-discovery-status" role="status"></p>
+<div id="source-server-results" hidden><label for="source-server">Choose an Enigma2 receiver</label><select id="source-server"></select></div>
+</div>
+<div id="source-satip-panel">
+<form id="device-tuner-form"><label for="source-tuner">Change tuner</label><select id="source-tuner"></select>
+<button id="source-apply-tuner" type="submit" class="primary">Apply SAT-IP tuner</button></form>
+<p id="source-tuner-help" class="hint"></p><p id="device-tuner-message" role="status" aria-live="polite"></p>
+<p class="hint">Use a tuner with a connected satellite cable.</p>
+</div>
+<div id="source-enigma" hidden><p class="hint">OpenWebif HTTP access on a private LAN is required. Authentication and HTTPS are not supported. Discovery checks port 80; enter other ports manually. No zap or settings commands are sent.</p>
+<label for="source-address">Receiver IPv4 address</label><input id="source-address" maxlength="15" placeholder="192.168.1.10">
+<label for="source-web-port">OpenWebif port</label><input id="source-web-port" type="number" min="1" max="65535" value="80">
+<label for="source-stream-port">Raw stream port</label><input id="source-stream-port" type="number" min="1" max="65535" value="8001">
+<button id="source-load-bouquets" type="button">Load TV bouquets</button></div>
+<p id="source-message" role="alert"></p>
+<p id="source-enigma-help" class="hint" hidden>Discover an Enigma2 receiver here, then import selected bouquets on the Channels page before activating it. The Enigma2 receiver allocates its physical tuner; the Pi cannot select it.</p>
+<h3>Activate a configured source</h3><p class="hint">Each source keeps its own channels and favourites. Activation briefly stops TV playback and reloads this page.</p>
+<form id="device-source-form"><label for="device-source">Source to activate</label><select id="device-source"></select>
+<button id="source-activate" class="primary">Activate source</button><p id="source-activation-help" class="hint"></p><p id="device-source-message" role="status" aria-live="polite"></p></form>
+</article>
+<article class="card"><h2>Wi-Fi</h2>
+<label class="option"><input id="device-wifi-enabled" type="checkbox"><span>Enable Wi-Fi</span></label>
+<form id="device-wifi-form">
+<label for="device-ssid">Network name</label><input id="device-ssid" list="device-networks" maxlength="32" required><datalist id="device-networks"></datalist>
+<button type="button" id="device-wifi-scan">Scan for networks</button>
+<label for="device-wifi-password">Wi-Fi password</label><input id="device-wifi-password" type="password" maxlength="64" autocomplete="new-password" placeholder="Unchanged">
+<label for="device-country">Country code</label><input id="device-country" maxlength="2" pattern="[A-Za-z]{2}" required>
+<button class="primary">Try Wi-Fi settings</button>
+</form>
+<div id="device-wifi-trial" hidden><p id="device-trial-message" role="status"></p>
+<div class="actions"><button id="device-wifi-keep" class="primary">Keep settings</button><button id="device-wifi-revert">Revert now</button></div></div>
+<p id="device-wifi-message" role="status" aria-live="polite"></p>
+</article>
+<article class="card"><h2>Passwords &amp; access</h2>
+<label class="option"><input id="device-ssh" type="checkbox"><span>Enable SSH</span></label>
+<div class="actions"><button type="button" id="device-change-web-password">Change web password</button><button type="button" id="device-change-root-password">Change root password</button></div>
+<p id="device-access-message" role="status" aria-live="polite"></p>
+</article>
+<article class="card storage-card"><h2>Time shift and USB storage</h2>
+<p class="hint">Live TV does not continuously write to USB. Pause starts time shifting; Return to live stops USB capture and discards its history. A paused position can expire at the storage limit. Use Safely remove USB before unplugging.</p>
+<p id="device-storage-status" role="status"></p>
+<button id="device-storage-choose" class="primary" type="button" hidden>Choose device</button>
+<button id="device-storage-eject" type="button" hidden>Safely remove USB</button>
+<button id="device-storage-forget" type="button" hidden>Forget USB configuration</button>
+<form id="device-storage-limit-form" hidden>
+<label for="device-storage-gib">Storage limit (GiB)</label><input id="device-storage-gib" type="number" min="1" step="any" required>
+<button id="device-storage-save" class="primary" type="submit">Save storage limit</button>
+</form>
+<p id="device-storage-message" role="status" aria-live="polite"></p>
+</article>
+<article class="card"><h2>Configuration backup</h2>
+<p class="hint">Save all receiver settings, channels, favourites and access credentials. Backups are not encrypted: keep them private. TV briefly pauses while a backup is created. Restore replaces settings and reboots; your network address and login may change.</p>
+<div class="actions"><button id="device-backup-download" type="button" class="primary" disabled>Download backup</button><button id="device-backup-restore" type="button" disabled>Restore backup</button></div>
+<input id="device-backup-file" type="file" accept=".tar,application/octet-stream,application/x-tar" hidden>
+<p id="device-backup-message" role="status" aria-live="polite"></p>
+</article>
+<article class="card"><h2>Maintenance</h2>
+<div class="actions"><button id="device-restart">Restart TV playback</button><button id="device-reboot">Reboot</button><button id="device-shutdown">Shut down</button></div>
+<p id="device-maintenance-message" role="status" aria-live="polite"></p>
+</article>
+</div>
+<article class="card" id="osd-settings-card"><h2>TV on-screen display</h2>
+<form id="osd-settings">
+<label for="osd-language">Language</label>
+<select id="osd-language" required disabled><option value="en">English</option><option value="de">Deutsch</option></select>
+<label for="osd-timeout">Bottom bar timeout (seconds)</label>
+<input id="osd-timeout" type="number" min="0.5" max="30" step="0.5" required disabled>
+<button class="primary" id="save-settings" disabled>Save settings</button>
+<p id="settings-status" class="hint" role="status" aria-live="polite"></p>
+</form></article>
+<article class="card"><h2>YouTube link</h2>
+<div class="actions"><button id="youtube-pair" class="primary">Link with TV code</button><button id="youtube-disable">Disable YouTube / return to TV</button><button id="youtube-unlink">Forget linked phones</button></div>
+<p id="youtube-pairing-help" class="hint" hidden>On your phone: YouTube → Settings → Watch on TV → Enter TV code. Enter the code below to link this receiver. Codes expire after five minutes; press “Link with TV code” again for a new one. Keep the code private: linked devices can control this receiver even from another network.</p>
+<p id="youtube-status" class="hint" role="status" aria-live="polite" hidden></p>
+<p id="youtube-code" class="eyebrow" hidden></p>
+<div id="youtube-qr" hidden>
+<canvas id="youtube-qr-image" role="img" aria-label="YouTube TV-code linking QR code"></canvas>
+<p class="hint">Scan with your phone camera to try opening YouTube’s linking flow, or <a id="youtube-pairing-link" rel="noreferrer">open it on this phone</a>. If the app does not offer linking, enter the numeric TV code above instead. Keep this QR code private too.</p>
+</div>
+</article>
+</section>
+</main>
+<dialog id="device-storage-dialog" aria-labelledby="device-storage-title">
+<form id="device-storage-form">
+<h2 id="device-storage-title">Choose USB storage device</h2>
+<label for="device-storage-disk">Device (model · capacity · serial)</label><select id="device-storage-disk" required></select>
+<p id="device-storage-dialog-message" role="status" aria-live="polite"></p>
+<div class="actions"><button id="device-storage-mount" class="primary" type="submit">Use existing ext4 filesystem</button><button id="device-storage-format" type="button">Format &amp; use device</button><button id="device-storage-cancel" type="button">Cancel</button></div>
+</form></dialog>
+<dialog id="device-change-password-dialog" aria-labelledby="device-change-password-title">
+<form id="device-change-password-form">
+<h2 id="device-change-password-title">Change password</h2>
+<label for="device-change-new">New password</label><input id="device-change-new" type="password" maxlength="128" autocomplete="new-password" required>
+<label for="device-change-confirm">Confirm new password</label><input id="device-change-confirm" type="password" maxlength="128" autocomplete="new-password" required>
+<p id="device-change-password-message" role="status" aria-live="polite"></p>
+<div class="actions"><button type="submit" class="primary" id="device-change-password-save">Change password</button><button type="button" id="device-change-password-cancel">Cancel</button></div>
+</form></dialog>
+<dialog id="device-password-dialog">
+<form id="device-password-prompt">
+<h2>Confirm with web password</h2>
+<label for="device-current-password">Current web password</label>
+<input id="device-current-password" type="password" autocomplete="current-password" required>
+<div class="actions"><button type="submit" class="primary">Continue</button><button type="button" id="device-password-cancel">Cancel</button></div>
+</form></dialog>
+</div>
+</body></html>

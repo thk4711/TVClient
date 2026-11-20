@@ -1,0 +1,22 @@
+#!/bin/sh
+# Development recovery: explicit SSH toggle, root password or optional public key.
+case "$1" in
+    start)
+        [ -f /run/satip-dev-ready ] || exit 0
+        [ "$(cat /etc/satip-ssh-enabled 2>/dev/null)" = yes ] || exit 0
+        umask 077
+        if [ -f /run/satip-data-ready ]; then
+            keys=/data/store/identity/dropbear
+        else
+            # Recovery remains possible with missing data; identity is ephemeral.
+            keys=/run/satip-recovery-dropbear
+        fi
+        mkdir -p "$keys"
+        [ -f "$keys/dropbear_ed25519_host_key" ] || \
+            dropbearkey -t ed25519 -f "$keys/dropbear_ed25519_host_key" >/dev/null || exit 1
+        start-stop-daemon -S -p /run/dropbear.pid -x /usr/sbin/dropbear \
+            -- -R -j -k -r "$keys/dropbear_ed25519_host_key" -P /run/dropbear.pid
+        ;;
+    stop) start-stop-daemon -K -p /run/dropbear.pid -x /usr/sbin/dropbear ;;
+    *) echo "Usage: $0 {start|stop}" >&2; exit 1 ;;
+esac

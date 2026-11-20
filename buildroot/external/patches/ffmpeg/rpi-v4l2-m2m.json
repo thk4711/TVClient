@@ -1,0 +1,25 @@
+{
+  "ffmpeg_version": "6.1.5",
+  "files": {
+    "libavcodec/Makefile": "67a084bb1b137f2c196d5d1ebd1b0bffcf257fcd2ee4d14914fdeab7fc53f5e9",
+    "libavcodec/v4l2_buffers.c": "48e5a3da8ef24f974a3fcbaf76c3378d70c13d343abc4be9495e8db7fee78352",
+    "libavcodec/v4l2_buffers.h": "c01084ceb5cfa965e96eb5f921aa3c737b51a65595f8e6ca2fbdca530a55ce67",
+    "libavcodec/v4l2_context.c": "d86dd898bcc01ce334de8c698e9b64b7342ced65a1347b8b6bf75cbde3a5ad07",
+    "libavcodec/v4l2_context.h": "93e69f62b577900667884200050432872445fc8d1067d2ed678ca33930919268",
+    "libavcodec/v4l2_fmt.c": "15ad0c46e15fd235401ef110b214920befe6e9d2c04f200391a0332416584bbe",
+    "libavcodec/v4l2_fmt.h": "f17aa95f4fc9a5004c22569ef187e179f533b8eb1f4bd0b4e0182ebcd5eab5d6",
+    "libavcodec/v4l2_m2m.c": "a14d47a320157ccf9782412a0997ae85d0895f34256bfa922fd91b73399a2647",
+    "libavcodec/v4l2_m2m.h": "0bd7b96c0c7d97a1a569ee69814a7cce209fee28f8bdcce9d369f7eb0a8d1fb0",
+    "libavcodec/v4l2_m2m_dec.c": "37075ba3666fbcf139ad3cb7d3352f53f4505efaf1e47b642c3702273bdeb5a7",
+    "libavcodec/v4l2_m2m_enc.c": "3e6e9c917f16a2f204484dea6e1f0070781cad06d41839c7cb4843821c6380ff",
+    "libavcodec/v4l2_req_dma_heap.h": "e037225265b26062508a8c4b8903f966c548ab5b7123ba3f51ce1aa110833488",
+    "libavcodec/v4l2_req_dmabufs.c": "b11e98c854993b640553ec1178ad5bf98e57a243a029cd115747c0316c23066e",
+    "libavcodec/v4l2_req_dmabufs.h": "33ee1596e01877dd836ab9062f38eb1b109b32ac6a8c13a0e252bb87a5f09f88",
+    "libavcodec/v4l2_req_utils.h": "d780fe42fc945d4dff70916f97bfdcc2a0dc5a1b76d096ff7f412e3650f79456",
+    "libavcodec/weak_link.c": "49d61dd1df1ba319d0d00d71a2a1125c13824267e934d1791f2bb4ef621db11d",
+    "libavcodec/weak_link.h": "66370d3e08600dddf7a8022d965513ba687af6fd41019a6ce224ba38d23426eb"
+  },
+  "patch_sha256": "03da7e5afa1b8b3699dc981b51a7d87d8119a0a2bc931ceda29ac00cae57bdf1",
+  "rpi_ffmpeg_revision": "ee95431db6c8efbf8fd27aa7dc8a44ffa52eda12",
+  "schema": 1
+}

@@ -1,0 +1,20 @@
+# Development card only: direct firmware boot, no U-Boot/A/B yet.
+start_file=start4.elf
+fixup_file=fixup4.dat
+kernel=Image
+arm_64bit=1
+disable_overscan=1
+disable_splash=1
+boot_delay=0
+# Avoid firmware's default HDMI-A-1/60 Hz modeset before the KMS splash.
+# KMS selects the configured connector/mode from satip-config.txt and data.
+disable_fw_kms_setup=1
+avoid_warnings=2
+enable_uart=1
+# Last-resort hardware reset if the watchdog feeder stops running.
+dtparam=watchdog=on
+# Dedicate PL011 on GPIO14/15 to recovery; Bluetooth is outside SAT-IP scope.
+dtoverlay=disable-bt
+dtoverlay=vc4-kms-v3d
+# Reference GPIO23 receiver; packaged learned map is specific to observed remote ID.
+dtoverlay=gpio-ir,gpio_pin=23,rc-map-name=rc-empty

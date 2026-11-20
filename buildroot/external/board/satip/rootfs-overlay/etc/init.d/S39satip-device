@@ -1,0 +1,11 @@
+#!/bin/sh
+# Restore an interrupted Wi-Fi trial before networking starts. init owns the daemon.
+export PYTHONPATH=/opt/satip
+case "$1" in
+    start)
+        [ -f /run/satip-data-ready ] && [ -f /run/satip-dev-ready ] || exit 0
+        /usr/bin/python3 -m satip_appliance.device_helper prepare
+        ;;
+    stop) : ;;
+    *) echo "Usage: $0 {start|stop}" >&2; exit 1 ;;
+esac

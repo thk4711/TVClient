@@ -1,0 +1,16 @@
+config BR2_PACKAGE_SATIP_APP
+	bool "SAT-IP application and appliance services"
+	depends on BR2_PACKAGE_PYTHON3
+	depends on BR2_PACKAGE_HOST_RUSTC_TARGET_ARCH_SUPPORTS
+	select BR2_PACKAGE_PYTHON_EVDEV
+	select BR2_PACKAGE_PYTHON_ZEROCONF
+	select BR2_PACKAGE_PYTHON_FASTAPI
+	select BR2_PACKAGE_PYTHON_UVICORN
+	select BR2_PACKAGE_PYTHON_HTTPX
+	select BR2_PACKAGE_PYTHON_SATIP_YT_DLP
+	select BR2_PACKAGE_PYTHON3_PYEXPAT
+	select BR2_PACKAGE_PYTHON3_ZLIB
+	select BR2_PACKAGE_TVHEADEND
+	help
+	  Root-owned application, static assets and fail-closed BusyBox services.
+	  No target pip or production configuration is included.

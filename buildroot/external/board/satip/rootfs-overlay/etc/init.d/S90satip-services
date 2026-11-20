@@ -1,0 +1,15 @@
+#!/bin/sh
+# Every consumer checks the data gate, independent of BusyBox rcS exit behavior.
+export PYTHONPATH=/opt/satip
+case "$1" in
+    start)
+        [ -f /run/satip-data-ready ] || exit 1
+        /usr/bin/python3 -m satip_appliance.supervisor all start || exit 1
+        ;;
+    stop)
+        /usr/bin/python3 -m satip_appliance.supervisor all stop || exit 1
+        # Guardians verify supervisor and adopted-descendant cleanup before stop.
+        ;;
+    restart) "$0" stop && "$0" start ;;
+    *) echo "Usage: $0 {start|stop|restart}" >&2; exit 1 ;;
+esac

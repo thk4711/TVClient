@@ -1,0 +1,6 @@
+# Fixed across all firmware slots. Tvheadend upstream auto-ID is overridden here.
+- -1 satip-input 420 - - - - Selected SAT-IP input devices
+satip-player 421 satip-player 421 * /nonexistent /bin/false video,render,audio,satip-input,satip-management SAT-IP player
+satip-web 422 satip-web 422 * /nonexistent /bin/false satip-management SAT-IP web
+- -1 satip-management 423 - - - - Shared SAT-IP management
+tvheadend 424 tvheadend 424 * /home/tvheadend /bin/false - SAT-IP backend

@@ -1,0 +1,171 @@
+From: SAT-IP appliance contributors
+Subject: [PATCH] mpegts: optional bounded idle mux grace for exclusive handover
+
+Retain an idle mux without a dummy/overlapping playback subscription.
+Reusing the active mux cancels the timer; forced stops bypass the grace.
+SAT-IP defaults to 1000 ms after stable appliance testing, bounded to two
+seconds. Saved zero values disable retention; other input types stay unchanged.
+Upstream-Status: Pending
+
+--- a/src/input/mpegts.h
++++ b/src/input/mpegts.h
+@@ -449,6 +449,8 @@
+ 
+   int                     mm_update_pids_flag;
+   mtimer_t                mm_update_pids_timer;
++  mtimer_t                mm_idle_grace_timer;
++  int                     mm_idle_grace_pending;
+ 
+   /*
+    * Services
+@@ -686,6 +688,7 @@
+   int mi_initscan;
+   int mi_idlescan;
+   uint32_t mi_free_weight;
++  int mi_idle_grace; /* Optional bounded idle-mux handover window, milliseconds. */
+ 
+   char *mi_linked;
+ 
+--- a/src/input/mpegts/mpegts_input.c
++++ b/src/input/mpegts/mpegts_input.c
+@@ -909,6 +909,7 @@
+ {
+   mpegts_mux_t *mm = s->s_dvb_mux;
+   elementary_stream_t *st;
++  int stop_reason = SM_CODE_OK;
+ 
+   /* Close PMT/CAT tables */
+   if (s->s_type == STYPE_STD) {
+@@ -954,13 +955,18 @@
+   }
+ 
+ no_pids:
++  /* A failed/unfinished service must not retain a bad session for recovery. */
++  if (mi->mi_idle_grace > 0 && s->s_type == STYPE_STD &&
++      (!(s->s_streaming_status & TSS_PACKETS) ||
++       (s->s_streaming_status & (TSS_ERRORS | TSS_NO_ACCESS))))
++    stop_reason = SM_CODE_ABORTED;
+   tvh_mutex_unlock(&s->s_stream_mutex);
+   tvh_mutex_unlock(&mi->mi_output_lock);
+ 
+   mpegts_mux_update_pids(mm);
+ 
+   /* Stop mux? */
+-  s->s_dvb_mux->mm_stop(s->s_dvb_mux, 0, SM_CODE_OK);
++  s->s_dvb_mux->mm_stop(s->s_dvb_mux, 0, stop_reason);
+ }
+ 
+ void
+--- a/src/input/mpegts/mpegts_mux.c
++++ b/src/input/mpegts/mpegts_mux.c
+@@ -237,6 +237,8 @@
+ 
+   /* Already active */
+   if (mm->mm_active) {
++    mtimer_disarm(&mm->mm_idle_grace_timer);
++    mm->mm_idle_grace_pending = 0;
+     *mmiptr = mm->mm_active;
+     tvhdebug(LS_MPEGTS, "%s - already active", mm->mm_nicename);
+     mpegts_mux_scan_active(mm, buf, (*mmiptr)->mmi_input);
+@@ -749,6 +751,9 @@
+   th_subscription_t *ths;
+   mpegts_service_t *s;
+ 
++  mtimer_disarm(&mm->mm_idle_grace_timer);
++  mm->mm_idle_grace_pending = 0;
++
+   /* Cancel scan */
+   mpegts_network_scan_queue_del(mm);
+ 
+@@ -844,7 +849,7 @@
+ }
+ 
+ static void
+-mpegts_mux_stop ( mpegts_mux_t *mm, int force, int reason )
++mpegts_mux_stop_now ( mpegts_mux_t *mm, int force, int reason )
+ {
+   char *s;
+   mpegts_mux_instance_t *mmi = mm->mm_active, *mmi2;
+@@ -884,6 +889,8 @@
+   if (mm->mm_active != mmi)
+     return;
+ 
++  mtimer_disarm(&mm->mm_idle_grace_timer);
++  mm->mm_idle_grace_pending = 0;
+   mi->mi_stopping_mux(mi, mmi);
+   mtimer_disarm(&mm->mm_update_pids_timer); /* Stop PID timer */
+   mi->mi_stop_mux(mi, mmi);
+@@ -943,6 +950,44 @@
+   mm->mm_fastscan_muxes = NULL;
+ }
+ 
++/* Idle grace owns no subscription and never extends an existing deadline.
++ * mtimer callbacks and mux lifecycle operations run under global_lock. */
++static void
++mpegts_mux_idle_grace_cb ( void *aux )
++{
++  mpegts_mux_t *mm = aux;
++  mm->mm_idle_grace_pending = 0;
++  mpegts_mux_stop_now(mm, 0, SM_CODE_OK);
++}
++
++static void
++mpegts_mux_stop ( mpegts_mux_t *mm, int force, int reason )
++{
++  mpegts_mux_instance_t *mmi = mm->mm_active;
++  int grace = mmi ? mmi->mmi_input->mi_idle_grace : 0;
++
++  if (!force && reason == SM_CODE_OK && mmi && grace > 0 &&
++      mmi->mmi_input->mi_enabled && mpegts_mux_is_enabled(mm) &&
++      mclk() - atomic_add_s64(&mmi->mmi_input->mi_last_dispatch, 0) < sec2mono(2)) {
++    if (mpegts_mux_has_subscribers(mm, mm->mm_nicename)) {
++      mtimer_disarm(&mm->mm_idle_grace_timer);
++      mm->mm_idle_grace_pending = 0;
++      return;
++    }
++    if (!mm->mm_idle_grace_pending) {
++      if (grace > 2000) grace = 2000;
++      mm->mm_idle_grace_pending = 1;
++      mtimer_arm_rel(&mm->mm_idle_grace_timer, mpegts_mux_idle_grace_cb,
++                     mm, ms2mono(grace));
++      tvhdebug(LS_MPEGTS, "%s - idle mux grace %d ms", mm->mm_nicename, grace);
++    }
++    return;
++  }
++  mtimer_disarm(&mm->mm_idle_grace_timer);
++  mm->mm_idle_grace_pending = 0;
++  mpegts_mux_stop_now(mm, force, reason);
++}
++
+ static void
+ mpegts_mux_update_pids_cb ( void *aux )
+ {
+--- a/src/input/mpegts/satip/satip_frontend.c
++++ b/src/input/mpegts/satip/satip_frontend.c
+@@ -246,6 +246,17 @@
+   .ic_caption    = N_("TV Adapters - SAT>IP DVB Frontend"),
+   .ic_changed    = satip_frontend_class_changed,
+   .ic_properties = (const property_t[]) {
++    {
++      .type     = PT_INT,
++      .id       = "idle_grace",
++      .name     = N_("Idle mux grace in ms (0-2000)"),
++      .desc     = N_("Keep an unsubscribed mux briefly for channel handover. "
++                     "Zero disables it. A different mux, disabled input or "
++                     "forced stop still releases the tuner immediately."),
++      .off      = offsetof(satip_frontend_t, mi_idle_grace),
++      .def.i    = 1000,
++      .opts     = PO_EXPERT,
++    },
+     {
+       .type     = PT_INT,
+       .id       = "fe_number",
+@@ -2338,6 +2349,8 @@
+   lfe->sf_master   = master;
+   lfe->sf_type_override = override ? strdup(override) : NULL;
+   lfe->sf_pass_weight = 1;
++  /* Apply the SAT-IP default before loading saved config (including zero). */
++  lfe->mi_idle_grace = 1000;
+   satip_frontend_hacks(lfe);
+   TAILQ_INIT(&lfe->sf_satconf);
+   tvh_mutex_init(&lfe->sf_dvr_lock, NULL);

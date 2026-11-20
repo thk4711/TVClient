@@ -1,0 +1,7 @@
+#!/bin/sh
+# BusyBox init respawns this fixed root helper, independently of the web service.
+export PYTHONPATH=/opt/satip
+while [ ! -f /run/satip-data-ready ] || [ ! -f /run/satip-dev-ready ]; do
+    sleep 2
+done
+exec /usr/bin/python3 -m satip_appliance.device_helper run > /run/satip-device-helper.log 2>&1

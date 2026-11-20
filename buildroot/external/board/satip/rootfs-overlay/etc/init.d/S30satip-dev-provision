@@ -1,0 +1,16 @@
+#!/bin/sh
+# Init scripts run independently; S25 cannot export this for our Python imports.
+export PYTHONPATH=/opt/satip
+case "$1" in
+    start)
+        umask 077
+        rm -f /run/satip-dev-ready
+        /usr/bin/python3 /usr/sbin/satip-dev-provision || {
+            [ -s /run/satip-boot-error ] || printf '%s\n' recovery > /run/satip-boot-error
+            exit 1
+        }
+        touch /run/satip-dev-ready
+        ;;
+    stop) ;;
+    *) echo "Usage: $0 {start|stop}" >&2; exit 1 ;;
+esac

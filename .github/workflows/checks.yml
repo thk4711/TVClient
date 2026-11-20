@@ -1,0 +1,80 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - python: "3.13"
+            dependencies: buildroot
+          - python: "3.14"
+            dependencies: buildroot
+          - python: "3.14"
+            dependencies: current
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e ".[dev]"
+      - if: matrix.dependencies == 'buildroot'
+        run: python -m pip install -r tests/buildroot-requirements.txt
+      - run: python -m pip check
+      - run: python -m unittest discover -s tests -v
+      - run: python -m unittest discover -s validation -p "test_*.py" -v
+      - run: ruff check satip_controller satip_appliance tests scripts/check_package.py
+      - run: mypy
+      - run: python -m build
+      - run: python scripts/check_package.py dist/*.whl dist/*.tar.gz
+  buildroot-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Validate pinned Buildroot configuration (no image qualification)
+        env:
+          BUILDROOT_DIR: ${{ runner.temp }}/buildroot
+          SATIP_OUTPUT_DIR: ${{ runner.temp }}/satip-output
+          BR2_DL_DIR: ${{ runner.temp }}/satip-downloads
+        run: buildroot/build.sh --configure-only
+  native-splash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libdrm-dev libfreetype-dev fonts-dejavu-core
+      - run: python3 -m pip install pillow zxing-cpp
+      - name: Compile and test splash rendering and DRM handoff
+        run: |
+          src=buildroot/external/package/satip-splash/src
+          out=$(mktemp -d)
+          cc -O2 -std=c11 -Wall -Wextra -Werror \
+            -DFONTS='"/usr/share/fonts/truetype/dejavu"' \
+            $(pkg-config --cflags libdrm freetype2) \
+            "$src/splash.c" "$src/render.c" "$src/qrcodegen.c" \
+            $(pkg-config --libs libdrm freetype2) -lm -o "$out/satip-splash"
+          cc -O2 -std=c11 -Wall -Wextra -Werror \
+            $(pkg-config --cflags libdrm freetype2) \
+            tests/splash_handoff_test.c "$src/render.c" "$src/qrcodegen.c" \
+            $(pkg-config --libs libdrm freetype2) -lm \
+            -Wl,--wrap=drmIoctl,--wrap=drmModeGetCrtc,--wrap=drmModeSetCrtc \
+            -Wl,--wrap=drmModeRmFB,--wrap=drmDropMaster,--wrap=ioctl \
+            -o "$out/splash-handoff-test"
+          "$out/splash-handoff-test"
+          SATIP_SPLASH_RENDERER="$out/satip-splash" python3 -m unittest tests.test_splash_native -v
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test tests/test_ui.cjs tests/test_settings_ui.cjs tests/test_device_ui.cjs
+      - run: CHROME_BINARY="$(command -v google-chrome)" CHROME_USER_DATA_DIR="$(mktemp -d)" node --test tests/test_ui_browser.cjs
+      - run: CHROME_BINARY="$(command -v google-chrome)" CHROME_USER_DATA_DIR="$(mktemp -d)" node --test tests/test_setup_browser.cjs
+      - run: CHROME_BINARY="$(command -v google-chrome)" CHROME_USER_DATA_DIR="$(mktemp -d)" node --test tests/test_device_browser.cjs
+      - run: CHROME_BINARY="$(command -v google-chrome)" CHROME_USER_DATA_DIR="$(mktemp -d)" node --test tests/test_source_browser_ui.cjs

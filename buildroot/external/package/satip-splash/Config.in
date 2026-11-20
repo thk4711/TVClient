@@ -1,0 +1,9 @@
+config BR2_PACKAGE_SATIP_SPLASH
+	bool "SAT-IP HDMI-Startbildschirm"
+	depends on BR2_PACKAGE_SATIP_APP
+	select BR2_PACKAGE_LIBDRM
+	select BR2_PACKAGE_FREETYPE
+	select BR2_PACKAGE_DEJAVU
+	select BR2_PACKAGE_DEJAVU_SANS
+	help
+	  Früher DRM/KMS-Startbildschirm mit englischer/deutscher Fortschrittsanzeige (Standard: Englisch).

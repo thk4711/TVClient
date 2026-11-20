@@ -1,0 +1,4 @@
+# USB keyboards and GPIO infrared are always available together.
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{id/bustype}=="0003", ENV{ID_INPUT_KEYBOARD}=="1", GROUP="satip-input", MODE="0660"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{id/bustype}=="0003", ATTRS{id/vendor}=="04d9", ATTRS{id/product}=="0006", GROUP="satip-input", MODE="0660"
+SUBSYSTEM=="input", KERNEL=="event*", DRIVERS=="gpio_ir_recv", GROUP="satip-input", MODE="0660"

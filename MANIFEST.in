@@ -1,0 +1,10 @@
+# The Python sdist is an application package, not the complete image source bundle.
+# Explicitly reset setuptools' defaults (including incomplete test collection).
+global-exclude *
+include pyproject.toml MANIFEST.in README.md LICENSE
+include satip_controller/*.py satip_appliance/*.py
+include satip_controller/static/*.html satip_controller/static/*.js
+include satip_controller/static/*.css satip_controller/static/*.txt
+include satip_controller.egg-info/PKG-INFO satip_controller.egg-info/SOURCES.txt
+include satip_controller.egg-info/dependency_links.txt satip_controller.egg-info/entry_points.txt
+include satip_controller.egg-info/requires.txt satip_controller.egg-info/top_level.txt

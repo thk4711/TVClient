@@ -1,0 +1,274 @@
+#!/usr/bin/env python3
+"""Limited, development-only on-card provisioning. Never execute config text."""
+
+import base64
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+
+
+KEYS = {"hostname", "ssh_authorized_key", "recovery_password_hash", "ssh_enabled", "root_password",
+        "wifi_country", "wifi_ssid", "wifi_psk", "initialize_data", "timezone",
+        "setup_password", "lan_access", "drm_connector", "drm_mode", "audio_device",
+        "keyboard_vendor", "keyboard_product", "ir_profile", "satip_xml",
+        "satellite", "satip_source", "tuner_number"}
+
+
+class ConfigError(ValueError):
+    """Only fixed reason codes and line numbers may reach the splash/logs."""
+    def __init__(self, reason, line=0):
+        self.code = f"config-{reason}:{line}"
+        super().__init__(self.code)
+
+
+def parse_config(text):
+    if len(text.encode("utf-8")) > 16384:
+        raise ConfigError("size")
+    values = {}
+    lines = {}
+    def invalid(key):
+        return ConfigError("value", lines.get(key, 0))
+    for number, line in enumerate(text.splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        key, separator, value = line.partition("=")
+        key = key.strip()
+        if key not in ("wifi_ssid", "wifi_psk"):
+            value = value.strip()
+        if not separator:
+            raise ConfigError("format", number)
+        if key not in KEYS:
+            raise ConfigError("unknown", number)
+        if key in values:
+            raise ConfigError("duplicate", number)
+        if not value or any(ord(char) < 32 or ord(char) == 127 or (ord(char) > 126 and key != "wifi_ssid") for char in value):
+            raise ConfigError("characters", number)
+        values[key] = value
+        lines[key] = number
+    hostname = values.get("hostname", "satip-dev")
+    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", hostname):
+        raise invalid("hostname")
+    if "ssh_authorized_key" in values:
+        parts = values["ssh_authorized_key"].split()
+        if len(parts) < 2 or parts[0] != "ssh-ed25519":
+            raise invalid("ssh_authorized_key")
+        try:
+            data = base64.b64decode(parts[1], validate=True)
+        except ValueError:
+            raise invalid("ssh_authorized_key") from None
+        prefix = b"\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x20"
+        if len(data) != len(prefix) + 32 or not data.startswith(prefix):
+            raise invalid("ssh_authorized_key")
+        values["ssh_authorized_key"] = " ".join(parts[:2])
+    if "root_password" in values and "recovery_password_hash" in values:
+        raise ConfigError("password-conflict", lines["root_password"])
+    if "recovery_password_hash" in values and not re.fullmatch(
+            r"\$6\$(?:rounds=[1-9][0-9]{3,6}\$)?[./A-Za-z0-9]{1,16}\$[./A-Za-z0-9]{86}",
+            values["recovery_password_hash"]):
+        raise invalid("recovery_password_hash")
+    wifi = {key for key in values if key.startswith("wifi_")}
+    if wifi and wifi != {"wifi_country", "wifi_ssid", "wifi_psk"}:
+        raise ConfigError("wifi", min(lines[key] for key in wifi))
+    if wifi:
+        if not re.fullmatch(r"[A-Z]{2}", values["wifi_country"]):
+            raise invalid("wifi_country")
+        if not 1 <= len(values["wifi_ssid"].encode()) <= 32:
+            raise invalid("wifi_ssid")
+        psk = values["wifi_psk"]
+        if not (8 <= len(psk) <= 63 or re.fullmatch(r"[0-9a-fA-F]{64}", psk)):
+            raise invalid("wifi_psk")
+    for key, options in {
+        "initialize_data": {"yes"}, "ssh_enabled": {"yes", "no"},
+        "lan_access": {"authenticated", "login-free"},
+        "drm_connector": {"HDMI-A-1", "HDMI-A-2"},
+        "drm_mode": {"1920x1080@50", "1920x1080@60", "1280x720@50"},
+        "audio_device": {"alsa/hdmi:CARD=vc4hdmi0,DEV=0", "alsa/hdmi:CARD=vc4hdmi1,DEV=0"},
+        "ir_profile": {"apple-a1294", "disabled"}, "satellite": {"Astra-19.2E"},
+    }.items():
+        if key in values and values[key] not in options:
+            raise invalid(key)
+    for key in ("keyboard_vendor", "keyboard_product"):
+        if key in values and not re.fullmatch(r"[0-9a-fA-F]{4}", values[key]):
+            raise invalid(key)
+    for key, maximum in (("satip_source", 4), ("tuner_number", 32)):
+        if key in values and (not values[key].isdigit() or not 1 <= int(values[key]) <= maximum):
+            raise invalid(key)
+    if "timezone" in values and not re.fullmatch(r"[A-Za-z0-9_+-]+(?:/[A-Za-z0-9_+-]+)*", values["timezone"]):
+        raise invalid("timezone")
+    if "satip_xml" in values:
+        from urllib.parse import urlsplit
+        import ipaddress
+        try:
+            address = urlsplit(values["satip_xml"])
+            host = ipaddress.IPv4Address(address.hostname)
+            port = address.port
+        except ValueError:
+            raise invalid("satip_xml") from None
+        if (address.scheme != "http" or not host.is_private or host.is_loopback
+                or host.is_link_local or host.is_unspecified or host.is_multicast
+                or address.username or address.password or address.fragment or address.query
+                or port not in (None, 80, 8080, 38400) or not re.fullmatch(r"/[A-Za-z0-9_./-]+", address.path)
+                or ".." in address.path):
+            raise invalid("satip_xml")
+    return values
+
+
+def read_config(path):
+    try:
+        if path.is_symlink():
+            raise ConfigError("file")
+        if path.exists() and path.stat().st_size > 16384:
+            raise ConfigError("size")
+        return parse_config(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, UnicodeError):
+        raise ConfigError("file") from None
+
+
+def atomic_write(root, relative, text, mode=0o600):
+    root = Path(root).resolve()
+    path = root / relative
+    # Paths are fixed by this script, never supplied by provisioning data.
+    for parent in [path, *path.parents]:
+        if parent == root:
+            break
+        if parent.is_symlink():
+            raise ValueError("Linked provisioning destination refused")
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, temporary = tempfile.mkstemp(prefix=".satip-", dir=path.parent)
+    try:
+        os.fchmod(fd, mode)
+        options = {} if isinstance(text, bytes) else {"encoding": "utf-8"}
+        with os.fdopen(fd, "wb" if isinstance(text, bytes) else "w", **options) as output:
+            output.write(text)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def provision(root, text):
+    values = parse_config(text)  # Validate everything before writing.
+    if "root_password" in values:
+        result = subprocess.run(
+            ["/bin/busybox", "mkpasswd", "-m", "sha512", "-P", "0"],
+            input=values.pop("root_password") + "\n", text=True,
+            capture_output=True, check=True, timeout=10)
+        values["recovery_password_hash"] = result.stdout.strip()
+        # Validate the generated hash before changing any files.
+        try:
+            parse_config("recovery_password_hash=" + values["recovery_password_hash"])
+        except ConfigError:
+            raise ValueError("Root password hashing failed") from None
+    atomic_write(root, "etc/hostname", values.get("hostname", "satip-dev") + "\n", 0o644)
+    if "ssh_authorized_key" in values:
+        atomic_write(root, "root/.ssh/authorized_keys", values["ssh_authorized_key"] + "\n")
+        os.chmod(Path(root) / "root/.ssh", 0o700)
+    if "recovery_password_hash" in values:
+        shadow = Path(root) / "etc/shadow"
+        if shadow.is_symlink():
+            raise ValueError("Linked shadow file refused")
+        lines = shadow.read_text(encoding="utf-8").splitlines()
+        if sum(line.startswith("root:") for line in lines) != 1:
+            raise ValueError("Expected one root shadow entry")
+        lines = ["root:" + values["recovery_password_hash"] + ":" + line.split(":", 2)[2]
+                 if line.startswith("root:") else line for line in lines]
+        atomic_write(root, "etc/shadow", "\n".join(lines) + "\n")
+    if "wifi_ssid" in values:
+        from satip_appliance.device_settings import wifi_config
+        wifi = wifi_config(values)
+        atomic_write(root, "etc/wpa_supplicant.conf", wifi)
+    # Older key-provisioned cards keep working; new cards default to SSH off.
+    enabled = values.get("ssh_enabled", "yes" if (Path(root) / "root/.ssh/authorized_keys").is_file() else "no")
+    atomic_write(root, "etc/satip-ssh-enabled", enabled + "\n", 0o644)
+    # Completion is last; repeatable after interrupted writes. It contains no secrets.
+    atomic_write(root, "etc/satip-dev-provisioned", "development-only\n")
+    return values
+
+
+def recovery_overrides(saved, current):
+    """Allow on-card recovery changes after initialization, keeping saved preferences."""
+    values = dict(saved)
+    if "root_password" in current:
+        values.pop("recovery_password_hash", None)
+    if "recovery_password_hash" in current:
+        values.pop("root_password", None)
+    for key in ("ssh_enabled", "root_password", "recovery_password_hash", "ssh_authorized_key"):
+        if key in current:
+            values[key] = current[key]
+    return values
+
+
+def boot_stage(root, code):
+    atomic_write(root, "run/satip-boot-stage", code + "\n", 0o644)
+
+
+def boot_failure(root, error, stage):
+    code = getattr(error, "code", stage)
+    print("SAT-IP boot failed: " + code, file=sys.stderr)
+    try:
+        atomic_write(root, "run/satip-boot-error", code + "\n", 0o644)
+    except OSError:
+        pass  # Keep the original failure and console diagnostic if /run is full.
+
+
+def main(root=Path("/")):
+    stage = "recovery"
+    try:
+        boot_stage(root, stage)
+        identity = root / "data/store/identity"
+        persistent = (root / "run/satip-data-ready").is_file()
+        saved = identity / "development.txt"
+        config = root / "boot/satip-config.txt"
+        current = read_config(config)
+        if persistent:
+            from satip_appliance.device_settings import recovery_values
+            current = recovery_values(root, current)
+        if persistent and saved.is_file():
+            try:
+                previous = parse_config(saved.read_text(encoding="utf-8"))
+            except ConfigError:
+                raise ValueError("Saved recovery settings invalid") from None
+            values = recovery_overrides(previous, current)
+        elif persistent and (identity / "hostname").is_file():
+            # Keep the imported hostname while allowing explicit recovery settings.
+            values = recovery_overrides({"hostname": (identity / "hostname").read_text().strip()}, current)
+        elif config.exists():
+            values = current
+        elif not (root / "etc/satip-dev-provisioned").is_file():
+            raise ValueError("No completed provisioning")
+        else:
+            return 0
+        values = provision(root, "".join(f"{key}={value}\n" for key, value in values.items()))
+        if persistent:
+            # Store the generated root hash, never another plaintext root password.
+            atomic_write(root, "data/store/identity/development.txt",
+                         "".join(f"{key}={value}\n" for key, value in values.items()))
+        if persistent and (identity / "root-access.json").is_file():
+            from satip_appliance.backup import apply_root_access
+            apply_root_access(root, current)
+        subprocess.run(["hostname", "-F", str(root / "etc/hostname")], check=True)
+        if persistent:
+            # Every imported setting is durable before removing boot-file seeds.
+            # Cleanup failure is retryable and must not prevent network startup.
+            from satip_appliance.config_restore import cleanup_import
+            cleanup_import(root)
+        return 0
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        # Do not log config values, hashes, SSID, key comments or filesystem paths.
+        boot_failure(root, error, stage)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
