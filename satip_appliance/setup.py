@@ -226,7 +226,7 @@ class Setup:
         entries = (await self.backend.request("dvb/scanfile/list", type="dvbs", satpos=192)).get("entries", [])
         return list({entry["key"]: entry for entry in entries}.values())
 
-    async def configure(self, server, frontend, scanfile=None):
+    async def configure(self, server, frontend, scanfile=None, *, start_scan=True):
         async with self.lock:
             if self.selected and self.registration["state"] != "ready":
                 raise BackendError("Wait for the selected server to register")
@@ -308,8 +308,9 @@ class Setup:
                 raise BackendError("Single frontend ownership readback failed")
             self.state["prepared"] = True
             atomic_json(self.state_path, self.state)
-            self.task = asyncio.create_task(self.run_scan())
-            self.manager.task = self.task
+            if start_scan:
+                self.task = asyncio.create_task(self.run_scan())
+                self.manager.task = self.task
 
     async def run_scan(self):
         try:

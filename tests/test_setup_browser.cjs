@@ -9,12 +9,40 @@ const {test} = require('node:test');
 test('setup recovers requests, retains errors and selections, and enters management', {timeout: 30000}, async () => {
     assert.ok(process.env.CHROME_BINARY && process.env.CHROME_USER_DATA_DIR);
     let stall = true, offline = false, configured = false, selections = 0, expectedFrontend = '3'.repeat(32), restoreFails = false, restores = 0;
+    let channelFault = '', channelPrepares = 0, channelUploads = 0, channelRestores = 0, channelStatuses = 0;
     const device = {url:'http://192.168.1.10:38400/description.xml', udn:'uuid:28146e70-1dd2-11b2-8021-c19f52d1fd53',
         name:'Digibit Twin', address:'192.168.1.10', tuners:2};
     let state = {state:'unconfigured', scan:{state:'idle'}, candidates:[], prepared:false, recovery_pending:false,
         discovery:{state:'idle',servers:[],interfaces:['wlan0'],warnings:[]},registration:{state:'idle'},tuners:[],scanfiles:[]};
     const server = http.createServer(async (request, response) => {
         response.setHeader('Cache-Control', 'no-store');
+        if (request.url.startsWith('/api/device')) {
+            assert.equal(request.headers.authorization, undefined);
+            assert.equal(request.headers['x-satip-action'], '1');
+            response.setHeader('Content-Type', 'application/json');
+            if (request.url.startsWith('/api/device/channels/upload/')) {
+                assert.equal(request.headers['content-type'], 'application/octet-stream');
+                assert.match(request.url, /\/[0-9a-f]{32}$/);
+                let size = 0; for await (const chunk of request) size += chunk.length;
+                assert.equal(size, 40000); channelUploads++;
+                if (channelFault === 'upload_timeout') return;
+                if (channelFault === 'validation') {
+                    response.writeHead(409); response.end(JSON.stringify({detail:'Wrong satellite fixture'})); return;
+                }
+                response.end(JSON.stringify({available:3,favourites:2,created_at:'2026-11-20'})); return;
+            }
+            let body = ''; for await (const chunk of request) body += chunk;
+            const payload = JSON.parse(body);
+            assert.match(payload.args.id, /^[0-9a-f]{32}$/);
+            if (payload.action === 'backup_channels_restore') {
+                channelRestores++; channelStatuses = 0;
+                response.end(JSON.stringify({state:'working'})); return;
+            }
+            assert.equal(payload.action, 'backup_status'); channelStatuses++;
+            if (channelFault === 'reconnect' && channelStatuses === 1) { response.destroy(); return; }
+            if (channelFault === 'reconnect') configured = true;
+            response.end(JSON.stringify({state:channelFault === 'reconnect' ? 'restored' : 'working'})); return;
+        }
         if (request.url.startsWith('/api/setup/')) {
             response.setHeader('Content-Type', 'application/json');
             const action = request.url.slice('/api/setup/'.length);
@@ -60,6 +88,12 @@ test('setup recovers requests, retains errors and selections, and enters managem
                 state.tuners = [1,2].map(n=>({server_uuid:'1'.repeat(32), frontend_uuid:String(n+1).repeat(32), server:device.address, tuner_number:n}));
                 state.scanfiles = [{key:'astra',val:'Astra'}];
                 response.end(JSON.stringify({state:'connecting'})); return;
+            }
+            if (action === 'channels/prepare') {
+                let body = ''; for await (const chunk of request) body += chunk;
+                assert.deepEqual(JSON.parse(body), {server_uuid:'1'.repeat(32),frontend_uuid:expectedFrontend});
+                assert.equal(state.scan.state, 'idle'); channelPrepares++; state.prepared = true;
+                response.end(JSON.stringify({state:'prepared'})); return;
             }
             if (action === 'scan') {
                 let body = ''; for await (const chunk of request) body += chunk;
@@ -171,6 +205,33 @@ test('setup recovers requests, retains errors and selections, and enters managem
         await evaluate('document.getElementById("tuner").value="3".repeat(32)');
         await new Promise(resolve=>setTimeout(resolve,150));
         assert.equal(await evaluate('document.getElementById("tuner").value'), '3'.repeat(32));
+        // Channel restore prepares the tuner but never starts a search.
+        const chooseChannelBackup = async confirm => {
+            await wait('!document.getElementById("setup-channels-restore").disabled');
+            await evaluate(`window.confirm=()=>${confirm}; var transfer=new DataTransfer(); transfer.items.add(new File([new Uint8Array(40000)], 'channels.tar')); document.getElementById("setup-channels-file").files=transfer.files; document.getElementById("setup-channels-file").dispatchEvent(new Event("change"));`);
+        };
+        await chooseChannelBackup(false);
+        await wait('!pending && document.getElementById("setup-channels-message").textContent.includes("Restore cancelled")');
+        assert.equal(channelPrepares, 1); assert.equal(channelUploads, 1); assert.equal(channelRestores, 0);
+        assert.equal(state.scan.state, 'idle');
+        assert.equal(await evaluate('document.getElementById("setup-channels-file").value'), '');
+        channelFault = 'validation';
+        await chooseChannelBackup(true);
+        await wait('!pending && document.getElementById("setup-channels-message").textContent.includes("Wrong satellite fixture")');
+        assert.equal(channelRestores, 0);
+        channelFault = 'upload_timeout';
+        await evaluate('window.nativeSignalTimeout=AbortSignal.timeout; AbortSignal.timeout=ms=>window.nativeSignalTimeout(ms===120000?100:ms)');
+        await chooseChannelBackup(true);
+        await wait('!pending && document.getElementById("setup-channels-message").textContent.length>0');
+        assert.equal(channelRestores, 0);
+        await evaluate('AbortSignal.timeout=window.nativeSignalTimeout');
+        channelFault = 'restore_timeout';
+        await evaluate('window.nativeNow=Date.now; let elapsed=0; Date.now=()=>window.nativeNow()+(elapsed+=500000)');
+        await chooseChannelBackup(true);
+        await wait('!pending && document.getElementById("setup-channels-message").textContent.includes("taking longer than expected")');
+        assert.equal(channelRestores, 1);
+        await evaluate('Date.now=window.nativeNow');
+        channelFault = '';
         await evaluate('document.getElementById("scan").click()');
         await wait('document.querySelectorAll("#channels input").length===1 && !document.getElementById("cancel").disabled');
         assert.match(await evaluate('document.getElementById("status").textContent'), /1 \/ 2 transponders scanned — 1 supported channels found/);
@@ -254,6 +315,18 @@ test('setup recovers requests, retains errors and selections, and enters managem
         await wait('document.getElementById("status").textContent.includes("Starting TV")');
         offline = true; await new Promise(resolve=>setTimeout(resolve,100)); offline = false; configured = true;
         await wait('document.body?.textContent.includes("Management ready")');
+        assert.equal(await evaluate('location.hash'), '#status');
+        // A separate fresh setup restores through a dropped status request and reloads management.
+        configured = false; expectedFrontend = '3'.repeat(32); channelFault = 'reconnect';
+        state = {...state,scan:{state:'idle'},prepared:false,completion_pending:false,
+            recovery_pending:false,selection_locked:false,frontend_uuid:undefined,candidates:[],starter:[]};
+        await send('Page.navigate',{url:'http://127.0.0.1:'+server.address().port+'/'});
+        await wait('typeof connected!=="undefined" && connected && !document.getElementById("setup-channels-restore").disabled');
+        await evaluate('document.getElementById("tuner").value="3".repeat(32)');
+        await chooseChannelBackup(true);
+        await wait('document.body?.textContent.includes("Management ready")');
+        assert.equal(channelRestores, 2); assert.equal(channelStatuses, 2);
+        assert.equal(state.scan.state, 'idle');
         assert.equal(await evaluate('location.hash'), '#status');
     } finally {
         if (socket) socket.close();

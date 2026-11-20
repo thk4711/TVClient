@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Restore Astra 19.2°E SAT-IP channel backups into a different installation’s
+  channel network while preserving its settings, credentials and tuner bindings.
+  Accept existing version-1 archives and add explicit source/satellite metadata
+  to new SAT-IP channel backups.
+- Offer channel restore during first-boot setup after selecting a SAT-IP tuner,
+  without requiring a full channel search. Report safe, specific backup refusals.
 - Limit public boot-file preferences to hostname, timezone, SSH enablement,
   root password and the three Wi-Fi fields. Reject obsolete boot options while
   preserving legacy saved settings and configuration-backup compatibility.

@@ -27,7 +27,8 @@ class DeviceAction(StrictRequest):
     current_password: SecretStr | None = None
 
 
-def install(app, login_path, helper=request, backup_root=Path("/run"), require_auth=lambda: True):
+def install(app, login_path, helper=request, backup_root=Path("/run"), require_auth=lambda: True,
+            *, setup_only=False):
     security = HTTPBasic(auto_error=False)
     backup_root = Path(backup_root)
     uploads = asyncio.Lock()
@@ -56,6 +57,8 @@ def install(app, login_path, helper=request, backup_root=Path("/run"), require_a
         return login
 
     async def call(action, args=None):
+        if setup_only and action not in ("backup_channels_validate", "backup_channels_restore", "backup_status"):
+            raise HTTPException(409, "Only SAT-IP channel restore is available during initial setup")
         try:
             return await helper(action, args)
         except ValueError as error:

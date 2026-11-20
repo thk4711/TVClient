@@ -10,7 +10,7 @@
 | 1 | Write and verify the appliance image on the correct microSD card; this erases it | [Flash the card](user-manual.md#1-flash-the-microsd-card) |
 | 2 | Connect HDMI, controls and Ethernet, or use a USB keyboard for Wi-Fi on the TV | [Connect TV and network](user-manual.md#2-connect-the-tv-and-your-home-network) |
 | 3 | Open the displayed URL or QR code from the same home network; no password is required | [Open browser setup](user-manual.md#3-open-setup-on-your-phone-or-computer) |
-| 4 | Choose SAT-IP and scan, or Enigma2 and import selected free-to-air TV bouquets | [Choose a source](user-manual.md#4-choose-your-source-and-load-channels) |
+| 4 | Choose SAT-IP and scan or restore a channel backup, or Enigma2 and import selected free-to-air TV bouquets | [Choose a source](user-manual.md#4-choose-your-source-and-load-channels) |
 | 5 | Select individual favourites; at least one is required | [Choose favourites](user-manual.md#5-select-your-favourites) |
 | 6 | Arrange them and select Save channels and watch TV | [Arrange and start TV](user-manual.md#6-arrange-favourites-and-start-watching) |
 | 7 | Set name, timezone and preferences; download a private configuration backup | [Set preferences](user-manual.md#7-set-the-receiver-name-timezone-and-preferences) |
@@ -32,7 +32,11 @@ See [infrared hardware](infrared.md) before fitting a sensor.
 
 - **SAT-IP:** an external network tuner with a satellite signal. Initial scanning
   targets Astra 19.2°E. Select an available, connected tuner and leave it free;
-  a full scan may take more than ten minutes. Follow [SAT-IP setup](user-manual.md#4a-sat-ip--select-a-tuner-and-scan).
+  a full scan may take more than ten minutes. Alternatively, select
+  **Restore channel backup instead**, upload a compatible Astra 19.2°E SAT-IP
+  backup and confirm its saved lineup. This finishes setup without scanning
+  or choosing favourites again, keeping the new receiver’s settings and passwords.
+  Follow [SAT-IP setup](user-manual.md#4a-sat-ip--select-a-tuner-and-scan).
 - **Enigma2:** an already configured TV receiver with compatible OpenWebif and raw
   streaming. Import bouquets instead of scanning Astra or selecting a tuner number.
   Follow [Enigma2 setup](user-manual.md#4b-enigma2--select-a-box-and-import-bouquets).

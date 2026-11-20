@@ -52,6 +52,7 @@ function controls() {
     `Server: ${setupState.selected_server.name} — ${setupState.selected_server.address}. The selected server is kept while completing setup.` : "";
   byId("scan").disabled = blocked || busy || !ready || needsRecovery() || !tuners.length ||
     !setupState.scanfiles?.length;
+  byId("setup-channels-restore").disabled = byId("scan").disabled;
   byId("cancel").hidden = !busy;
   byId("recover").hidden = !needsRecovery();
   byId("cancel").disabled = blocked || !busy || setupState.scan.state === "stopping";
@@ -119,6 +120,46 @@ action("scan", async () => {
   await api("scan", {server_uuid: tuner.server_uuid, frontend_uuid: tuner.frontend_uuid});
   setupState.scan = {state: "starting"};
 });
+byId("setup-channels-restore").onclick = () => {
+  if (pending || byId("setup-channels-restore").disabled) return;
+  byId("setup-channels-file").value = ""; byId("setup-channels-file").click();
+};
+byId("setup-channels-file").onchange = async () => {
+  const file = byId("setup-channels-file").files?.[0];
+  if (!file || pending || byId("setup-channels-restore").disabled) return;
+  const message = text => { byId("setup-channels-message").textContent = text; };
+  if (!file.size || file.size > 32 * 1024**2) { message("Choose a non-empty channel backup up to 32 MiB."); return; }
+  pending = true; controls();
+  try {
+    const tuner = tuners.find(t => t.frontend_uuid === byId("tuner").value);
+    if (!tuner) throw new Error("Discover and select a tuner first");
+    message("Preparing the selected tuner…");
+    await api("channels/prepare", {server_uuid: tuner.server_uuid, frontend_uuid: tuner.frontend_uuid});
+    const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join("");
+    message("Uploading and validating channel backup…");
+    const response = await fetch(`/api/device/channels/upload/${id}`, {
+      method: "POST", headers: {"X-Satip-Action": "1", "Content-Type": "application/octet-stream"},
+      body: file, signal: AbortSignal.timeout(120000)});
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || "Channel backup validation failed");
+    if (!window.confirm(`Restore ${result.available} channels and ${result.favourites} favourites from ${result.created_at}? Setup will finish using your selected tuner. Receiver settings and passwords stay unchanged.`)) {
+      message("Restore cancelled. No channels imported. You can scan or choose another backup."); return;
+    }
+    await receiverRequest("/api/device", "POST", {action: "backup_channels_restore", args: {id}});
+    message("Restoring channels and starting TV… The page reconnects automatically.");
+    const deadline = Date.now() + 420000;
+    while (Date.now() < deadline) {
+      let status;
+      try { status = await receiverRequest("/api/device", "POST", {action: "backup_status", args: {id}}, undefined, 10000); }
+      catch (_) { /* The web service briefly stops while the archive is activated. */ }
+      if (status?.state === "restored") { window.location.replace("/#status"); window.location.reload(); return; }
+      if (["error", "missing"].includes(status?.state)) throw new Error(status.message || "Restore expired. Choose the backup again.");
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    throw new Error("Restore is taking longer than expected. Check receiver status before retrying.");
+  } catch (error) { message(error.message); }
+  finally { pending = false; byId("setup-channels-file").value = ""; controls(); }
+};
 for (const id of ["cancel", "recover"]) action(id, async () => {
   if (id === "cancel") {
     setupState.scan.state = "stopping";

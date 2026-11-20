@@ -41,7 +41,7 @@ class ServerSelection(ServerURL):
     udn: str = Field(min_length=1, max_length=64)
 
 
-def create_setup_app(store=Path("/data/store"), backend=None, hosts=None, transition=None):
+def create_setup_app(store=Path("/data/store"), backend=None, hosts=None, transition=None, device_helper=None):
     store = Path(store)
     fixed_hosts = hosts
     hosts = hosts or allowed_hosts()
@@ -84,7 +84,11 @@ def create_setup_app(store=Path("/data/store"), backend=None, hosts=None, transi
     app = FastAPI(title="SAT-IP first setup", lifespan=lifespan, docs_url=None,
                   redoc_url=None, openapi_url=None, dependencies=[Depends(authenticate)])
     app.state.setup = setup
-    app.add_middleware(RequestLimits)
+    app.add_middleware(RequestLimits, backup_upload=True)
+    from .device_api import install as install_device
+    from .device_client import request as device_request
+    install_device(app, store / "config/web/login.json", helper=device_helper or device_request,
+                   backup_root=store.parent.parent / "run", require_auth=lambda: False, setup_only=True)
     app.add_middleware(LocalHostMiddleware, provider=lambda: fixed_hosts or allowed_hosts())
     from satip_controller.recovery import LocalHealth
     app.add_middleware(LocalHealth)
@@ -231,6 +235,13 @@ def create_setup_app(store=Path("/data/store"), backend=None, hosts=None, transi
             raise HTTPException(400, "Confirm exclusive tuner use for setup")
         await setup.configure(selection.server_uuid, selection.frontend_uuid, selection.scanfile)
         return {"state": "scanning"}
+
+    @app.post("/api/setup/channels/prepare")
+    async def prepare_channels(selection: Selection):
+        if not selection.confirm_scan:
+            raise HTTPException(400, "Confirm exclusive tuner use for setup")
+        await setup.configure(selection.server_uuid, selection.frontend_uuid, selection.scanfile, start_scan=False)
+        return {"state": "prepared"}
 
     @app.post("/api/setup/cancel")
     async def cancel():

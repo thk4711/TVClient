@@ -41,6 +41,8 @@ LAN discovery, browser bouquet import and separate source lineups.
   English is the image default, including the startup screen.
 - Download and [restore channel-only backups](doc/device-settings.md#channel-backup)
   for available channels and favourite order, without changing device settings.
+  SAT-IP channel backups also restore after reflashing, with a first-boot option
+  to skip scanning after selecting the new receiver’s tuner.
 - Download and [restore configuration backups](doc/device-settings.md#configuration-backup)
   through the browser, including channels, favourites, network settings and access credentials.
 - Automatic [recovery](doc/recovery.md) from frozen TV services, with a receiver

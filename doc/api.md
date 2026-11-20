@@ -415,7 +415,7 @@ Setup routes require the unconfigured installation state, valid Host, and
 - Normal `/api/device` status includes `require_auth`; login-free devices do not require password re-entry. Setting a web password enables authentication for subsequent requests.
 
 
-## Channel backup API (configured appliance only)
+## Channel backup API (appliance)
 
 Uses the same authenticated `POST /api/device` action envelope and random
 32-character hexadecimal IDs as configuration backup:
@@ -443,17 +443,35 @@ after `restored`; there is no reboot or credential/network change.
 
 Archive format `satip-channels`, version 1, uses the bounded plain-tar manifest,
 checksums, pinned backend revision and persistent schema checks. Its exact
-allowlist is `channels.json` (version and network UUID),
+allowlist is `channels.json` (channel metadata version and network UUID; SAT-IP
+version 2 also includes `source: satip` and `satellite: 19.2E`),
 `management/library.json`, `web/candidates.json`, saved
 `tvheadend/channel/config/<uuid>` mappings and
 `tvheadend/input/dvb/networks/<network-uuid>/muxes/<mux-uuid>` records (including
 embedded services). Network configuration, adapters, access credentials, hooks,
-links and unrelated files are not imported. The network UUID must match the
-current installation. Existing restricted playback ACL fields remain unchanged
+links and unrelated files are not imported. SAT-IP multiplex records are relocated
+into the destination network; network UUID equality is not required. Validate
+Astra 19.2°E DVB-S/S2 reception, global identifier collisions and playback access
+before activation. Legacy version-1 SAT-IP metadata is accepted when the mux
+records supply matching satellite/delivery information. Blank mux orbital fields
+inherit the destination network. For legacy cross-network import, require at least
+one explicit matching orbital position and reject any conflicting position.
+Version-2 metadata supplies the satellite even if all mux orbital fields are blank.
+Enigma2 still requires
+the same configured network. Existing restricted playback ACL fields remain unchanged
 except a safely checked increase of its channel-number maximum if required.
 
-Activation clones the stopped current persistent store, overlays only channel
-paths, reconstructs permissions, and commits with the existing durable whole-tree
+First setup exposes `POST /api/setup/channels/prepare` with the same tuner
+selection payload as `/api/setup/scan`, but does not start a scan. After preparing
+the tuner/network, use the channel upload, restore and `backup_status` endpoints
+above, without login. All other device actions and full-configuration uploads
+through this setup API are refused. No existing library is required. Restore
+writes destination-generated web configuration and the normal setup-completion
+marker; the root supervisor independently validates it before enabling TV.
+
+Activation clones the stopped current persistent store, overlays channel
+paths and the active source’s saved library/catalogue, reconstructs permissions,
+and commits with the existing durable whole-tree
 rename journal. Other current settings and operational history are retained;
 channel restore recovers/clears the committed journal and restarts services rather
 than rebooting. Free space is checked before removing a prior rollback tree.

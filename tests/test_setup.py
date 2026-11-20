@@ -313,6 +313,15 @@ class SetupTests(FreshFixture, unittest.IsolatedAsyncioTestCase):
         create = next(i for i, (endpoint, _) in enumerate(self.backend.calls) if endpoint == "mpegts/network/create")
         self.assertLess(disable, create)
 
+    async def test_prepare_for_channel_restore_does_not_start_scan(self):
+        with patch.object(self.setup, "run_scan", new=AsyncMock()) as scan:
+            await self.setup.configure(SERVER, FRONTEND, SCANFILE, start_scan=False)
+            scan.assert_not_called()
+        self.assertIsNone(self.setup.task)
+        self.assertTrue(read_json(self.setup.state_path)["prepared"])
+        self.assertEqual(self.setup.state["network_uuid"], NETWORK)
+        self.assertFalse((self.store / "management/library.json").exists())
+
     async def test_retry_reuses_network_and_refuses_changed_selection(self):
         await self.configure()
         await self.configure()

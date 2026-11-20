@@ -151,7 +151,7 @@ Use this path for a network SAT-IP tuner, not for an ordinary Enigma2 box stream
 2. In the **SAT-IP server** section, a single discovered server connects automatically. If several are found, select yours in **Server**. Select **Search again** if necessary. Keep the server powered and on the same non-guest home network.
 3. If discovery finds none, expand **Add server by description URL** and enter the server's private-LAN SAT-IP XML description URL from its configuration/manual. Supported HTTP ports are 80, 8080 and 38400. This is the server's XML description, not the Pi's setup address.
 4. Once it reports ready, select an available **Tuner**. This is a receiving resource in the external server, not a TV channel number. Do not choose a tuner already occupied by another device.
-5. Select **Scan**. Wait while the Pi searches the installed Astra 19.2°E frequency list.
+5. Select **Scan**. Wait while the Pi searches the installed Astra 19.2°E frequency list. If you already have a SAT-IP channel backup, select **Restore channel backup instead**, choose its `.tar` file, review the date and channel/favourite counts and confirm. This imports the saved lineup and finishes setup without a full scan; skip steps 5 and 6 below and check picture and sound. Cancel leaves setup ready to scan or choose another backup.
 
 ![SAT-IP setup: the selected server, available tuner and Scan button. Example setup screen.](images/manual-tuner.png)
 
@@ -409,7 +409,7 @@ Make a configuration backup after setup and after important changes. Keep it on 
 
 | Backup | Where to find it | What it restores |
 |---|---|---|
-| Channel backup | Channels → Channel backup | Available channels and saved favourite order on a compatible existing installation; device settings stay unchanged |
+| Channel backup | Channels → Channel backup; also SAT-IP first-time setup | Available channels and saved favourite order; SAT-IP restore also works after reflashing, keeping new device settings |
 | Configuration backup | Settings → Configuration backup | Channels, favourites, supported device/network settings and access credentials; receiver reboots after restore |
 
 Neither backup includes the operating-system image, recordings or time-shift history. The two file types are not interchangeable.
@@ -431,7 +431,7 @@ Neither backup includes the operating-system image, recordings or time-shift his
 4. For a channel backup, wait for the page to reconnect; channels and saved favourite order are replaced, not merged. The receiver does not reboot.
 5. For a full configuration backup, wait for reboot, then reconnect using the **restored network settings and web password**. The address or hostname can change.
 
-Channel-only backups are for the same compatible channel-network identity, not portable importing into another newly configured receiver. For recovery after reflashing, use a compatible full configuration backup after completing first-time setup. Check the backup compatibility requirements before changing image versions. Restoring USB settings never formats the drive. See [backup details](device-settings.md#configuration-backup) for the precise scope and compatibility restrictions.
+SAT-IP channel backups can restore your Astra 19.2°E lineup after reflashing or on another Pi, keeping the new receiver’s settings, passwords and tuner selection. In first-time setup, select the SAT-IP server and tuner and choose **Restore channel backup instead** to skip the full channel search. Review the backup date and counts and confirm; TV starts with the saved favourite order. Existing version-1 SAT-IP backups are supported by the updated importer. Enigma2 channel restore still requires the same configured channel network. Both backup kinds require a compatible backend version; check compatibility before changing image versions. Restoring USB settings never formats the drive. See [channel backup details](device-settings.md#channel-backup) and [configuration backup details](device-settings.md#configuration-backup).
 
 ## Optional features
 

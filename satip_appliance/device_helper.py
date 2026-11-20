@@ -190,8 +190,11 @@ class Device:
         if (self.root / "run/satip-source-maintenance.json").exists():
             raise DeviceError("TV source maintenance is running")
         if action.startswith("backup_"):
+            from .backup import BackupError
             try:
                 return self.backups.handle(action, args)
+            except BackupError as error:
+                raise DeviceError(str(error)) from None
             except ValueError as error:
                 raise DeviceError("Invalid backup or pending operation. Check compatibility and finish other changes.") from error
         if self.backups.pending or self.backups.gate.exists():

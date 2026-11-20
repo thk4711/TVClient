@@ -9,10 +9,14 @@ not a record of deployments or an assertion of complete hardware qualification.
 
 Configuration backup/restore and channel-only backup/restore are implemented.
 Version 1 is tied to persistent schema 1 and the pinned backend revision.
-Channel-only restore additionally requires the current channel-network identity.
-Full restore reboots; channel-only restore restarts services without reboot or
-changing device/access preferences. Neither is a firmware update or generic
-cross-version/cross-receiver importer.
+SAT-IP channel restore accepts a different network identity, including a fresh
+installation after source/tuner preparation. It relocates multiplex records into
+the destination Astra 19.2°E DVB-S/S2 network and preserves reception bindings.
+Version-2 channel metadata identifies source/satellite; legacy version-1 SAT-IP
+metadata is supported with multiplex-level satellite/delivery checks. Enigma2
+channel restore still requires the same configured network. Full restore reboots;
+channel-only restore restarts services without reboot or changing device/access
+preferences. Neither is a firmware update or generic cross-version importer.
 
 ## Automated checks
 
@@ -20,7 +24,12 @@ Run `tests/test_backup.py`, `tests/test_channel_backup.py` and the device API/UI
 checks using isolated fake roots. Cover bounded plain tar and packed backend
 records, manifest checksums, path/link/credential rejection, kind separation,
 streaming size/deadline limits, authentication, cancellation, free-space checks,
-permission reconstruction and interrupted rename/helper recovery.
+permission reconstruction and interrupted rename/helper recovery. Also cover
+different destination network UUIDs, legacy and version-2 SAT-IP metadata,
+satellite/delivery mismatches, inherited blank orbital positions and legacy
+satellite evidence, collisions with inactive networks, active source
+snapshot consistency, first-setup streaming uploads and completion without an
+existing library or scan, and interrupted first-setup import rollback.
 
 ## Live acceptance checklist
 
@@ -41,7 +50,11 @@ Do not run concurrently with scan, preview, Wi-Fi trials or other maintenance.
 6. Make reversible settings changes, restore full backup and reconnect after reboot
    with restored network/login/SSH identity. Confirm file permissions, saved source
    profiles, cleared activation journal and retained private pre-restore tree.
-7. Observe physical HDMI picture/audio and verify ordinary controls. A playing
+7. On a separate factory-fresh card, select a SAT-IP tuner and restore a legacy
+   channel archive from another installation instead of scanning. Verify retained
+   new credentials/network/tuner bindings, favourite order, setup completion,
+   reconnect/reboot persistence and subsequent source switching.
+8. Observe physical HDMI picture/audio and verify ordinary controls. A playing
    status response is not physical acceptance.
 
 Use [the channel-backup exercise](../validation/exercise_channel_backup_on_pi.py)

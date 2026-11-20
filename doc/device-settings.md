@@ -196,12 +196,33 @@ caches or media. These settings stay as they are at restore time. The restricted
 playback channel-number range may widen only as needed for restored mappings;
 this does not grant administrative access.
 
-Version 1 requires the **same channel-network identity** and pinned Tvheadend
-revision as the currently configured receiver. Use it to restore an earlier
-lineup on the same installation. It is not a portable cross-receiver importer,
-and a newly configured installation after reflashing may have a different network
-identity. Use full configuration backup for that scenario. Channel-only and full
-configuration files are deliberately not interchangeable.
+**SAT-IP channel backups can be restored after reflashing or on another Pi**
+configured for Astra 19.2°E. The importer places multiplexes and services into
+the destination’s channel network, keeping its SAT-IP server, tuner and reception
+settings. A different internal network identity is accepted. The saved lineup
+replaces the active lineup; inactive TV-source lineups are retained. Conflicting
+backend identifiers or unrelated channels that would gain access are refused
+rather than overwritten. Restored frequencies and services can become outdated;
+rescan if a channel no longer receives a signal.
+
+During first-boot setup, select your SAT-IP server and tuner, then choose
+**Restore channel backup instead**. Review the date and counts and confirm;
+setup finishes with the restored favourites, without a full channel search.
+Cancel imports no channels and leaves the selected tuner ready for a scan or
+another backup. Configure network access and reception on the new device first.
+
+The plain-tar manifest remains version 1 and requires the pinned Tvheadend
+revision and compatible persistent schema. New SAT-IP archives use version-2
+channel metadata with explicit source/satellite information. Older version-1
+SAT-IP archives are also accepted when their multiplex records identify Astra
+19.2°E DVB-S/S2 reception. Blank multiplex orbital positions inherit the network;
+a legacy backup imported into a different network must contain at least one
+explicit Astra position and no conflicting position. If every position is blank,
+use a new backup with explicit satellite metadata or rescan. An older software image may reject new channel metadata;
+use the updated importer. This is not a general backend-format migration.
+**Enigma2 channel restore still requires the same configured channel network**;
+portable Enigma2 import is not supported. Channel-only and full configuration
+files are deliberately not interchangeable.
 
 The archive is not encrypted. Although it contains no access credentials, it
 reveals your channel lineup; store it appropriately and transfer only on a trusted

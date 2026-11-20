@@ -46,7 +46,10 @@ Supported HTTP ports: 80, 8080 and 38400.</p>
 <div class="setup-field"><label for="tuner">Tuner</label><select id="tuner"></select></div>
 <p id="tuner-hint">Choose the tuner to use for the next search.</p>
 <p>Satellite: <strong>Astra 19.2°E</strong>. The transponder list is selected automatically.</p>
-<div class="actions"><button id="scan" class="primary">Scan</button><button id="cancel" hidden>Stop search</button><button id="recover" hidden>Restore tuner settings</button></div>
+<div class="actions"><button id="scan" class="primary">Scan</button><button id="setup-channels-restore" type="button">Restore channel backup instead</button><button id="cancel" hidden>Stop search</button><button id="recover" hidden>Restore tuner settings</button></div>
+<input id="setup-channels-file" type="file" accept=".tar,application/x-tar" hidden>
+<p class="hint">Restore an Astra 19.2°E SAT-IP channel backup after selecting your tuner. Channels and favourite order are imported without a full search; this receiver’s settings and passwords are kept.</p>
+<p id="setup-channels-message" role="status" aria-live="polite"></p>
 <progress id="scan-progress" aria-label="Channel search progress" hidden></progress>
 <p id="status" role="status"></p>
 <p id="scan-detail"></p>

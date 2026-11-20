@@ -22,6 +22,11 @@ from satip_controller.state import atomic_json, lease_active, read_json
 from . import device_settings as settings, persistent
 from .provision import DEFAULTS, REVISION, player_config, web_config
 
+
+class BackupError(ValueError):
+    """A fixed, secret-free backup refusal suitable for the browser."""
+
+
 MAX_ARCHIVE = 32 * 1024 * 1024
 MAX_FILE = 8 * 1024 * 1024
 MAX_FILES = 10000
@@ -479,24 +484,24 @@ class Backups:
         if source_gate.exists():
             from satip_controller.coordination import owner_alive
             if not source_recovery or owner_alive(read_json(source_gate).get("owner")):
-                raise ValueError("TV source maintenance is running")
+                raise BackupError("TV source maintenance is running")
         if not source_recovery and any((self.device.store / name).exists() for name in
                                        ("web/tv-source-transaction.json", "web/satip-tuner-transaction.json")):
-            raise ValueError("Recover the interrupted TV source selection first")
+            raise BackupError("Recover the interrupted TV source selection first")
         if self.device.work or self.device.trial():
-            raise ValueError("Finish the pending device change first")
+            raise BackupError("Finish the pending device change first")
         store = self.device.store
         source_journal = source_recovery and any((store / ("web/enigma2-import/" + name)).exists()
                                                for name in ("mux-rollback.json", "network-rollback.json", "publish-rollback.json"))
         if (store / "web/mux-rollback.json").exists() or (not source_journal and settings.read_optional(store / "management/recovery.json").get("pending")):
-            raise ValueError("Finish channel search or recovery first")
+            raise BackupError("Finish channel search or recovery first")
         if self.root == Path("/"):
             for name in ("scan-lease.json", "preview-lease.json"):
                 lease = settings.read_optional(self.root / "run/satip-management" / name)
                 if source_journal and name == "scan-lease.json":
                     continue
                 if lease.get("recovery_pending") or (preview_held(lease) if name.startswith("preview") else lease_active(lease)):
-                    raise ValueError("Stop Live TV or channel search first")
+                    raise BackupError("Stop Live TV or channel search first")
 
     def handle(self, action, args):
         if not isinstance(args, dict) or set(args) != {"id"} or not isinstance(args["id"], str) or not TOKEN.fullmatch(args["id"]):
@@ -510,7 +515,11 @@ class Backups:
             return result if result.get("id") == identifier else {"id": identifier, "state": "missing"}
         self.quiet()
         if self.pending or self.gate.exists():
-            raise ValueError("Configuration maintenance is already running")
+            raise BackupError("Configuration maintenance is already running")
+        if not channels and read_json(self.device.store / "installation.json").get("state") == "unconfigured":
+            raise BackupError("Complete initial setup before using configuration backups")
+        if channels and action == "backup_create" and read_json(self.device.store / "installation.json").get("state") == "unconfigured":
+            raise BackupError("Complete initial setup before downloading channel backups")
         self.prepare()
         if action == "backup_create":
             for old in self.directory.glob("download-*.tar"):
@@ -535,11 +544,13 @@ class Backups:
                     manifest = unpack(archive, stage)
                     validate_stage(stage, self.device)
                     summary = {}
-            except Exception:
+            except Exception as error:
                 if stage.exists():
                     persistent.reject_links(stage)
                     shutil.rmtree(stage)
-                raise ValueError("Invalid or incompatible configuration backup") from None
+                if isinstance(error, BackupError):
+                    raise
+                raise BackupError("Invalid or incompatible backup. Check the file format and backend version.") from None
             finally:
                 archive.unlink(missing_ok=True)
             atomic_json(self.result, {"id": identifier, "state": "validated", "kind": kind, **summary, "created_at": manifest["created_at"],
