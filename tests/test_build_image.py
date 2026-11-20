@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import os
 import runpy
+import shlex
 import shutil
 import subprocess
 import sys
@@ -25,6 +26,10 @@ class BuildImageTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
+        # Developer-local settings must not change test defaults or execution mode.
+        config = patch.object(build, "CONFIG", self.root / "absent.ini")
+        config.start()
+        self.addCleanup(config.stop)
 
     def repository(self, name="repo"):
         """Copy the reviewed inputs, never local caches or private evidence."""
@@ -50,9 +55,105 @@ class BuildImageTests(unittest.TestCase):
 
     def test_bad_ini_is_rejected(self):
         for text in ["[build_image]\nunknown=1\n", "[other]\njobs=1\n",
-                     "[DEFAULT]\njobs=1\n[build_image]\n", "[build_image]\nzip_image=perhaps\n"]:
+                     "[DEFAULT]\njobs=1\n[build_image]\n", "[build_image]\nzip_image=perhaps\n",
+                     "[build_image]\ninstall_host_packages=perhaps\n"]:
             with self.subTest(text=text), self.assertRaises(build.BuildError):
                 build.parse_args(self.config(text))
+
+    def test_host_packages_ini_cli_precedence_and_default(self):
+        self.assertFalse(build.parse_args(self.config("[build_image]\n")).install_host_packages)
+        for value in ("true", "yes", "on", "1"):
+            with self.subTest(value=value):
+                argv = self.config(f"[build_image]\ninstall_host_packages={value}\n")
+                self.assertTrue(build.parse_args(argv).install_host_packages)
+                self.assertFalse(build.parse_args(argv + ["--no-apt"]).install_host_packages)
+        for value in ("false", "no", "off", "0"):
+            with self.subTest(value=value):
+                argv = self.config(f"[build_image]\ninstall_host_packages={value}\n")
+                self.assertFalse(build.parse_args(argv).install_host_packages)
+                self.assertTrue(build.parse_args(argv + ["--install-host-packages"]).install_host_packages)
+
+    def host_args(self, execution="local"):
+        return build.parse_args(self.config("[build_image]\n") + [
+            "--execution", execution, "--host", "builder@example",
+            "--remote-root", "/home/builder/satip", "--install-host-packages"])
+
+    def test_host_packages_run_on_selected_host_after_platform_check(self):
+        for execution in ("local", "remote"):
+            with self.subTest(execution=execution), patch.object(build, "run") as run, \
+                    patch.object(build, "ssh") as ssh:
+                args = self.host_args(execution)
+                build.prepare_host(args)
+                calls = (ssh if execution == "remote" else run).call_args_list
+                (run if execution == "remote" else ssh).assert_not_called()
+                self.assertEqual(len(calls), 3)
+                commands = [call.args[1] if execution == "remote" else shlex.join(call.args[0])
+                            for call in calls]
+                self.assertIn("native amd64 Debian required", commands[0])
+                self.assertIn("sudo -n", commands[1])
+                self.assertIn("DEBIAN_FRONTEND=noninteractive", commands[1])
+                self.assertIn("install -y", commands[1])
+                for package in build.HOST_PACKAGES:
+                    self.assertIn(package, commands[1])
+                self.assertIn("missing build tools", commands[2])
+
+    def test_host_packages_disabled_only_checks_host(self):
+        args = self.host_args()
+        args.install_host_packages = False
+        with patch.object(build, "run") as run:
+            build.prepare_host(args)
+        self.assertEqual(run.call_count, 2)
+        self.assertTrue(all(call.args[0][0] == "python3" for call in run.call_args_list))
+
+    def test_platform_or_install_failure_stops_preparation(self):
+        for failures, count in (([build.BuildError("unsupported host")], 1),
+                                (["", build.BuildError("apt failed")], 2)):
+            with self.subTest(count=count), patch.object(build, "run", side_effect=failures) as run:
+                with self.assertRaises(build.BuildError):
+                    build.prepare_host(self.host_args())
+                self.assertEqual(run.call_count, count)
+
+    def test_install_script_with_fake_apt_and_sudo(self):
+        with patch.object(build, "run") as run:
+            build.prepare_host(self.host_args())
+        command = run.call_args_list[1].args[0]
+        fake_bin = self.root / "bin"
+        fake_bin.mkdir()
+        scripts = {
+            "id": 'printf "%s\\n" "$FAKE_UID"',
+            "sudo": 'printf "%s\\n" "$*" >> "$SUDO_LOG"\n'
+                    '[ "$SUDO_FAIL" = 0 ] || exit 1\n'
+                    '[ "$1" = -n ] || exit 2\nshift\nexec "$@"',
+            "apt-get": '[ "$DEBIAN_FRONTEND" = noninteractive ] || exit 2\n'
+                       'printf "%s\\n" "$*" >> "$APT_LOG"\n'
+                       '[ "$APT_FAIL" != "$1" ] || exit 1',
+        }
+        for name, script in scripts.items():
+            path = fake_bin / name
+            path.write_text("#!/bin/sh\n" + script + "\n")
+            path.chmod(0o755)
+        for index, (uid, sudo_fail, apt_fail, success) in enumerate((
+                ("0", "0", "", True), ("1000", "0", "", True),
+                ("1000", "1", "", False), ("1000", "0", "update", False),
+                ("1000", "0", "install", False))):
+            with self.subTest(uid=uid, sudo_fail=sudo_fail, apt_fail=apt_fail):
+                apt_log = self.root / f"apt-{index}.log"
+                sudo_log = self.root / f"sudo-{index}.log"
+                env = {**os.environ, "PATH": str(fake_bin) + os.pathsep + os.defpath,
+                       "FAKE_UID": uid, "SUDO_FAIL": sudo_fail, "APT_FAIL": apt_fail,
+                       "APT_LOG": str(apt_log), "SUDO_LOG": str(sudo_log)}
+                result = subprocess.run(command, env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode == 0, success, result.stderr)
+                if success:
+                    self.assertEqual(apt_log.read_text().splitlines(), [
+                        "update", "install -y " + " ".join(build.HOST_PACKAGES)])
+                if uid == "0":
+                    self.assertFalse(sudo_log.exists())
+                if sudo_fail == "1":
+                    self.assertFalse(apt_log.exists())
+                    self.assertIn("non-interactive sudo", result.stderr)
+                if apt_fail == "update":
+                    self.assertEqual(apt_log.read_text().splitlines(), ["update"])
 
     def test_originating_git_identity_is_bound_to_inputs(self):
         expected = {"example": "a" * 64}
@@ -98,7 +199,7 @@ class BuildImageTests(unittest.TestCase):
         with patch.object(build, "run", side_effect=AssertionError("command executed")), \
                 patch.object(build, "guard", side_effect=AssertionError("lock created")), \
                 contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(build.main(["--dry-run", "--repository", str(repo),
+            self.assertEqual(build.main(["--dry-run", "--install-host-packages", "--repository", str(repo),
                                          "--artifacts-dir", str(self.root / "absent")]), 0)
         self.assertFalse((self.root / "absent").exists())
 

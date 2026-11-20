@@ -27,7 +27,11 @@ ARTIFACTS = ("sdcard.img", "rootfs.ext4", "Image", "bcm2711-rpi-4-b.dtb",
 PIN = "72d9d4fa636a371ef9eb99c92a735ce9f6d829d5"
 KEYS = {"execution", "repository", "host", "ssh_port", "remote_root",
         "buildroot_dir", "output_dir", "download_cache", "artifacts_dir",
-        "jobs", "zip_image"}
+        "jobs", "zip_image", "install_host_packages"}
+HOST_PACKAGES = ("build-essential", "bc", "bison", "flex", "libncurses-dev",
+                 "libssl-dev", "rsync", "cpio", "unzip", "wget", "file", "git",
+                 "python3", "gawk", "perl", "patch", "gzip", "bzip2", "xz-utils",
+                 "tar", "ca-certificates", "openssh-client")
 
 
 class BuildError(RuntimeError):
@@ -110,10 +114,16 @@ def parse_args(argv=None):
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--zip", dest="zip_image", action="store_true")
     group.add_argument("--no-zip", dest="zip_image", action="store_false")
-    boolean = values.get("zip_image", "true").lower()
-    if boolean not in configparser.ConfigParser.BOOLEAN_STATES:
-        raise BuildError("zip_image must be a boolean")
-    parser.set_defaults(zip_image=configparser.ConfigParser.BOOLEAN_STATES[boolean])
+    apt_group = parser.add_mutually_exclusive_group()
+    apt_group.add_argument("--install-host-packages", dest="install_host_packages",
+                           action="store_true", help="install Debian prerequisites on the build host (requires non-interactive sudo)")
+    apt_group.add_argument("--no-apt", dest="install_host_packages", action="store_false",
+                           help="do not install build-host packages (default)")
+    for key, default in (("zip_image", "true"), ("install_host_packages", "false")):
+        boolean = values.get(key, default).lower()
+        if boolean not in configparser.ConfigParser.BOOLEAN_STATES:
+            raise BuildError(f"{key} must be a boolean")
+        parser.set_defaults(**{key: configparser.ConfigParser.BOOLEAN_STATES[boolean]})
     args = parser.parse_args(argv)
     if args.execution not in ("local", "remote") or args.jobs < 1 or not 1 <= args.ssh_port <= 65535:
         raise BuildError("invalid execution, jobs or SSH port")
@@ -169,6 +179,33 @@ def run(argv, *, capture=False, log=None, env=None):
 def ssh(args, command, **kwargs):
     return run(["ssh", "-n", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=15",
                 "-p", str(args.ssh_port), args.host, command], **kwargs)
+
+
+def prepare_host(args):
+    """Check the platform, optionally provision it, then check build tools."""
+    def execute(command, *, capture=True):
+        if args.execution == "remote":
+            return ssh(args, shlex.join(command), capture=capture)
+        return run(command, capture=capture)
+
+    platform_check = "import platform; from pathlib import Path; assert platform.system()=='Linux' and platform.machine()=='x86_64' and Path('/etc/debian_version').is_file(), 'native amd64 Debian required'"
+    execute(["python3", "-c", platform_check])
+    if args.install_host_packages:
+        # SSH has no stdin: fail rather than hang on a sudo password prompt.
+        install = """set -eu
+command -v apt-get >/dev/null || { echo 'apt-get is required to install host packages' >&2; exit 1; }
+if [ "$(id -u)" -eq 0 ]; then
+    set -- env DEBIAN_FRONTEND=noninteractive apt-get
+else
+    command -v sudo >/dev/null || { echo 'host package installation requires sudo; install prerequisites manually or use --no-apt' >&2; exit 1; }
+    sudo -n true || { echo 'host package installation requires non-interactive sudo; install prerequisites manually or use --no-apt' >&2; exit 1; }
+    set -- sudo -n env DEBIAN_FRONTEND=noninteractive apt-get
+fi
+"$@" update
+"$@" install -y """ + shlex.join(HOST_PACKAGES)
+        execute(["sh", "-c", install], capture=False)
+    tools_check = "import shutil; assert all(shutil.which(t) for t in ['python3','make','git','rsync']), 'missing build tools; install prerequisites manually or use --install-host-packages'"
+    execute(["python3", "-c", tools_check])
 
 
 # Same guards locally and remotely. mkdir locks fail closed after a crash;
@@ -305,18 +342,15 @@ def main(argv=None):
                    "BR2_DL_DIR": args.download_cache}
     build = [args.source + "/buildroot/build.sh", "--jobs", str(args.jobs)]
     print(json.dumps({"execution": args.execution, "host": args.host, "source": args.source,
-                      "jobs": args.jobs, **environment, "artifacts": str(destination),
+                      "jobs": args.jobs, "install_host_packages": args.install_host_packages,
+                      **environment, "artifacts": str(destination),
                       "build": build, "staged_files": sorted(expected)}, indent=2))
     if args.dry_run:
-        print("Dry run: no host contact, staging, locks, build or artifact writes.")
+        print("Dry run: no host contact, package installation, staging, locks, build or artifact writes.")
         return 0
     identity = source_identity(args.repository, expected)
     environment["SATIP_SOURCE_IDENTITY"] = json.dumps(identity, sort_keys=True, separators=(",", ":"))
-    preflight = "import platform,shutil; from pathlib import Path; assert platform.system()=='Linux' and platform.machine()=='x86_64' and Path('/etc/debian_version').is_file(), 'native amd64 Debian required'; assert all(shutil.which(t) for t in ['python3','make','git','rsync']), 'missing build tools'"
-    if args.execution == "remote":
-        ssh(args, shlex.join(["python3", "-c", preflight]), capture=True)
-    else:
-        run(["python3", "-c", preflight], capture=True)
+    prepare_host(args)
     token = uuid.uuid4().hex
     output = PurePosixPath(args.output_dir)
     source = PurePosixPath(args.source)

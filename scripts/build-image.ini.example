@@ -7,6 +7,8 @@ ssh_port = 22
 remote_root = /home/build-user/embedded/satip
 jobs = 16
 zip_image = true
+# Opt-in Debian prerequisites on the build host (requires non-interactive sudo).
+install_host_packages = false
 # Defaults derive from remote_root; remote paths must be absolute/normalized.
 # buildroot_dir = /home/build-user/embedded/satip/buildroot
 # output_dir = /home/build-user/embedded/satip/output/rpi4-64

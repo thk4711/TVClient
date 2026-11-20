@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Add opt-in installation of Debian build-host prerequisites with non-interactive
+  privilege checks; dry runs and direct shell builds do not install packages.
 - Restore Astra 19.2°E SAT-IP channel backups into a different installation’s
   channel network while preserving its settings, credentials and tuner bindings.
   Accept existing version-1 archives and add explicit source/satellite metadata

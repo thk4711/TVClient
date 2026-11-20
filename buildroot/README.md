@@ -112,6 +112,15 @@ Copy optional settings from `scripts/build-image.ini.example` to the ignored
 `scripts/build-image.ini` and adapt them. CLI settings override INI values.
 Remote SSH is non-interactive, keeps host-key verification, and defaults to port 22;
 use `--ssh-port` for your route. Default jobs: 16.
+The wrapper accepts `install_host_packages = false` (the default). Set it to
+`true` or pass `--install-host-packages` to run `apt-get update` and install the
+prerequisites listed above on the selected Debian amd64 **build host**, not the Pi
+or the orchestration Mac. `--no-apt` overrides an enabled INI setting. Installation
+requires root or non-interactive sudo (`sudo -n`); unavailable privileges or apt
+failures stop the build. Compilation should still use a non-root account. The
+build host must already have Python 3.11+ to run preflight checks. Dry runs report
+the setting but never contact the host or install packages. The direct shell
+helper remains package-installation-free.
 The orchestration computer also needs Python 3.11+, rsync and an SSH client.
 Establish the build account's authorized key and verify the build host fingerprint
 through your normal trusted channel before invoking the wrapper. Check that
